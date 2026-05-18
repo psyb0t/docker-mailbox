@@ -215,11 +215,26 @@ When you want to zero in on one account:
 | `GET`    | `/mailboxes/{name}/folders`                           | List IMAP folders.                                                                                                          |
 | `GET`    | `/mailboxes/{name}/messages?folder=&limit=&search=`   | Newest-first headers. `search` is raw IMAP (`ALL`, `UNSEEN`, `FROM foo@bar`). `limit` ≤ 500.                                |
 | `GET`    | `/mailboxes/{name}/search?from=&subject=&...`         | Same structured query as `/inbox` minus `mailbox`, scoped to one account.                                                   |
-| `GET`    | `/mailboxes/{name}/messages/{uid}?folder=`            | One message, fully decoded (`body_text` + `body_html` + attachment metadata).                                               |
+| `GET`    | `/mailboxes/{name}/messages/{uid}?folder=&reader=`    | One message, fully decoded (`body_text` + `body_html` + attachment metadata). Add `reader=true` to also get `body_reader` — HTML stripped to clean text/markdown (no tables, styles, tracking pixels). |
 | `DELETE` | `/mailboxes/{name}/messages/{uid}?folder=`            | `\Deleted` + EXPUNGE. Gone. Really gone.                                                                                    |
 | `POST`   | `/mailboxes/{name}/messages/{uid}/seen?folder=`       | Body `{"seen": true|false}` — flip the `\Seen` flag.                                                                        |
 
 UIDs everywhere, never sequence numbers — identifiers stay stable when the mailbox shifts around under you.
+
+### Reader mode
+
+`?reader=true` on `GET /mailboxes/{name}/messages/{uid}` (or `reader=true` on the MCP `get_message` tool) adds a `body_reader` field — the HTML body flattened into clean markdown. Built for LLMs and humans who don't want to read raw `<table><tr><td style="…">…</td></tr></table>` chrome.
+
+How it works:
+
+1. The HTML body is run through [html2text](https://github.com/Alir3z4/html2text) with `ignore_images=True`, `body_width=0` (no hard wrap), `unicode_snob=True`. Styles, scripts, comments, head, and `<img>` tags are dropped.
+2. Headings → `#`, bold/italic preserved, `<a href="x">text</a>` → `[text](x)` inline, lists/tables converted to markdown equivalents.
+3. If there is no HTML body, `body_reader` falls back to the trimmed `body_text`.
+4. The original `body_text` and `body_html` are still returned alongside — `body_reader` is additive. UI clients can render HTML; agents can read markdown; nobody loses anything.
+
+Why not just use `body_text`? Most marketing/transactional mail ships `multipart/alternative` where the `text/plain` part is missing, a "view in HTML" stub, or auto-generated noise. The real content lives in the HTML part. Reader mode extracts it. Why not readability/trafilatura? Those are tuned to find the article inside a webpage full of navigation and ads. Emails ARE the content — the noise is styling, which is exactly what html2text strips. No DOM-extraction needed.
+
+Reply-quote chains aren't stripped (you get the full thread), table-layout emails come through as pipe-tables (faithful but noisy), and attachments stay as metadata only.
 
 ### SMTP
 
@@ -253,7 +268,7 @@ inbox                       # unified read across all IMAP mailboxes (mailbox= f
 list_folders                # (mailbox)
 list_messages               # (mailbox, folder, limit, search)
 search                      # (mailbox, from, subject, since, ...)
-get_message                 # (mailbox, uid)
+get_message                 # (mailbox, uid, reader=true → +body_reader)
 delete_message              # (mailbox, uid)
 mark_seen                   # (mailbox, uid, seen)
 send                        # (mailbox, to, subject, body_text/html, ...)

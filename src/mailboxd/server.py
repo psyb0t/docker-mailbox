@@ -320,11 +320,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         name: str = Path(...),
         uid: str = Path(...),
         folder: str | None = Query(None),
+        reader: bool = Query(False, description="Add `body_reader`: readable text/markdown from HTML"),
     ) -> dict[str, Any]:
         mb = _resolve(cfg, name)
         _need(mb, "imap")
         try:
-            return imap_fetch(mb.imap, uid, folder=folder)  # type: ignore[arg-type]
+            return imap_fetch(mb.imap, uid, folder=folder, reader=reader)  # type: ignore[arg-type]
         except ImapError as e:
             raise HTTPException(status_code=502, detail=str(e)) from e
 

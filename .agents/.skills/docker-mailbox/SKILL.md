@@ -161,6 +161,11 @@ curl -s -H "Authorization: Bearer $MAILBOX_TOKEN" \
 curl -s -H "Authorization: Bearer $MAILBOX_TOKEN" \
   "$MAILBOX_URL/mailboxes/personal/messages/1234?folder=INBOX"
 
+# Same but also get `body_reader` — HTML stripped to clean text/markdown
+# (perfect for feeding into an LLM without all the table/style chrome)
+curl -s -H "Authorization: Bearer $MAILBOX_TOKEN" \
+  "$MAILBOX_URL/mailboxes/personal/messages/1234?folder=INBOX&reader=true"
+
 # Mark seen / unseen
 curl -s -X POST -H "Authorization: Bearer $MAILBOX_TOKEN" \
   -H 'Content-Type: application/json' \
@@ -187,11 +192,22 @@ Full-message fetch returns:
   "message_id": "<...@corp.com>",
   "body_text": "plain text body",
   "body_html": "<p>html body</p>",
+  "body_reader": null,
   "attachments": [
     {"filename": "agenda.pdf", "content_type": "application/pdf", "size": 12345}
   ]
 }
 ```
+
+`body_reader` is `null` unless you pass `reader=true`. When enabled it falls back to `body_text` if no HTML body exists, otherwise it's the HTML body stripped to readable markdown (links inline, images dropped, tables flattened, no styles/scripts).
+
+#### How reader mode works
+
+Runs the HTML body through [html2text](https://github.com/Alir3z4/html2text) configured for LLM consumption: `body_width=0` (no wrap), `ignore_images=True` (kills `<img>` tracking pixels), `unicode_snob=True` (real unicode, no smart-quote mangling). `<style>`, `<script>`, `<head>`, comments and all inline-style chrome get dropped. Headings → `#`, bold/italic preserved, `<a href="x">text</a>` → `[text](x)` inline, lists/tables converted to markdown equivalents.
+
+The original `body_text` and `body_html` are still returned — `body_reader` is additive. UI clients can render HTML, agents can read markdown, attachments stay as metadata.
+
+Useful when the `text/plain` part is missing or an auto-generated "view in HTML client" stub (which is true for most marketing/transactional mail). Limitations: reply-quote chains aren't stripped, table-layout emails come through as pipe-tables (faithful but visually noisy).
 
 ### SMTP
 
@@ -234,7 +250,7 @@ inbox                       # unified read across all IMAP mailboxes (mailbox= f
 list_folders                # (mailbox)
 list_messages               # (mailbox, folder, limit, search)
 search                      # (mailbox, from, subject, since, ...)
-get_message                 # (mailbox, uid)
+get_message                 # (mailbox, uid, reader=true → +body_reader)
 delete_message              # (mailbox, uid)
 mark_seen                   # (mailbox, uid, seen)
 send                        # (mailbox, to, subject, body_text/html, ...)

@@ -300,13 +300,24 @@ def _register_imap_tools(
     tools.append(
         types.Tool(
             name="get_message",
-            description="Fetch a full message (incl. body) from a mailbox by UID.",
+            description=(
+                "Fetch a full message (incl. body) from a mailbox by UID. "
+                "Pass `reader=true` to also include `body_reader` — a clean, "
+                "readable text/markdown version of the HTML body with chrome "
+                "stripped (no tables, styles, tracking pixels, just the words). "
+                "Best for LLMs that don't want to read raw HTML."
+            ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "mailbox": _MAILBOX_ARG,
                     "uid": {"type": "string"},
                     "folder": {"type": "string"},
+                    "reader": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Include `body_reader` (HTML stripped to readable text).",
+                    },
                 },
                 "required": ["mailbox", "uid"],
                 "additionalProperties": False,
@@ -316,7 +327,12 @@ def _register_imap_tools(
 
     def _get_message(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
         mb = _resolve_mailbox(_c, str(args["mailbox"]))
-        return imap_fetch(_require_imap(mb), str(args["uid"]), folder=args.get("folder"))
+        return imap_fetch(
+            _require_imap(mb),
+            str(args["uid"]),
+            folder=args.get("folder"),
+            reader=bool(args.get("reader", False)),
+        )
 
     handlers["get_message"] = _get_message
 

@@ -17,7 +17,26 @@ from email.message import Message
 from email.utils import parsedate_to_datetime
 from typing import Any, Iterator
 
+import html2text
+
 from .config import ImapConfig, MailboxConfig
+
+
+def _html_to_reader(html: str) -> str:
+    """Strip HTML chrome and return readable plain-text/markdown.
+
+    Designed for email bodies: drops style/script, flattens tables, keeps
+    links inline, ignores images. Output is wrapped at a sane width so
+    long marketing-email lines don't blow out terminals.
+    """
+    h = html2text.HTML2Text()
+    h.body_width = 0
+    h.ignore_images = True
+    h.ignore_emphasis = False
+    h.single_line_break = False
+    h.skip_internal_links = True
+    h.unicode_snob = True
+    return h.handle(html).strip()
 
 
 class ImapError(Exception):
@@ -270,7 +289,12 @@ def _extract_flags(meta: str) -> list[str]:
     return meta[j + 1 : k].split()
 
 
-def fetch_message(cfg: ImapConfig, uid: str, folder: str | None = None) -> dict[str, Any]:
+def fetch_message(
+    cfg: ImapConfig,
+    uid: str,
+    folder: str | None = None,
+    reader: bool = False,
+) -> dict[str, Any]:
     folder = folder or cfg.default_folder
     with _connect(cfg) as conn:
         _select(conn, folder, readonly=True)
@@ -279,10 +303,14 @@ def fetch_message(cfg: ImapConfig, uid: str, folder: str | None = None) -> dict[
             raise ImapError(f"could not fetch UID {uid}")
         raw = data[0][1]
         msg = email.message_from_bytes(raw if isinstance(raw, bytes) else raw.encode())
-        return _serialize_message(msg, uid=uid)
+        return _serialize_message(msg, uid=uid, reader=reader)
 
 
-def _serialize_message(msg: Message, uid: str | None = None) -> dict[str, Any]:
+def _serialize_message(
+    msg: Message,
+    uid: str | None = None,
+    reader: bool = False,
+) -> dict[str, Any]:
     body_text: str | None = None
     body_html: str | None = None
     attachments: list[dict[str, Any]] = []
@@ -312,6 +340,13 @@ def _serialize_message(msg: Message, uid: str | None = None) -> dict[str, Any]:
         else:
             body_text = _payload_str(msg)
 
+    body_reader: str | None = None
+    if reader:
+        if body_html:
+            body_reader = _html_to_reader(body_html)
+        elif body_text:
+            body_reader = body_text.strip() or None
+
     return {
         "uid": uid,
         "from": _decode(msg.get("From")),
@@ -322,6 +357,7 @@ def _serialize_message(msg: Message, uid: str | None = None) -> dict[str, Any]:
         "message_id": _decode(msg.get("Message-ID")),
         "body_text": body_text,
         "body_html": body_html,
+        "body_reader": body_reader,
         "attachments": attachments,
     }
 
