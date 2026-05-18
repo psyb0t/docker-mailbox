@@ -1,0 +1,56 @@
+# mailboxd config — one entry per mailbox you want to control.
+#
+# Each mailbox can declare any combination of:
+#   - imap: for reading / listing / deleting messages
+#   - smtp: for sending
+# At least one must be set.
+#
+# `name` is the URL-safe handle the HTTP API and MCP tools refer to.
+
+log_level: INFO
+
+# Bearer-token auth — applies to ALL non-/health endpoints (HTTP API + the
+# /mcp streamable-HTTP transport). Leave `tokens` empty / omit the block to
+# disable auth entirely.
+auth:
+  tokens:
+    - "replace-with-a-long-random-token"
+    # - "second-token-for-rotation"
+
+mailboxes:
+  - name: personal
+    description: "My main Gmail account"
+
+    imap:
+      host: imap.gmail.com
+      port: 993
+      tls: ssl              # ssl | starttls | none   (default ssl)
+      username: me@gmail.com
+      password: "app-password-here"
+      default_folder: INBOX
+
+    smtp:
+      host: smtp.gmail.com
+      port: 465
+      tls: ssl              # ssl | starttls | none   (default starttls)
+      username: me@gmail.com
+      password: "app-password-here"
+      from_address: "Me <me@gmail.com>"
+
+  - name: work
+    description: "Work mailbox over IMAP+SMTP"
+
+    imap:
+      host: mail.example.com
+      port: 143
+      tls: starttls
+      username: me@example.com
+      password: "secret"
+
+    smtp:
+      host: mail.example.com
+      port: 587
+      tls: starttls
+      username: me@example.com
+      password: "secret"
+      from_address: me@example.com
