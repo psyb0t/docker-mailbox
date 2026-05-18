@@ -226,23 +226,21 @@ The SMTP client automatically sets `Date`, a domain-aligned `Message-ID`, and a 
 
 ## MCP server
 
-Same operations exposed as MCP tools over **streamable HTTP** at `POST /mcp` (same port, same bearer). Tools are namespaced by mailbox so multiple accounts don't collide:
+Same operations exposed as MCP tools over **streamable HTTP** at `POST /mcp` (same port, same bearer). One flat tool set — every per-mailbox op takes `mailbox` as a parameter (the configured name OR the email address), so the catalog stays constant-sized no matter how many accounts you configure:
 
 ```
-inbox                       # unified read — pass mailbox="..." to filter
-personal__list_folders
-personal__list_messages
-personal__search            # structured single-mailbox search
-personal__get_message
-personal__delete_message
-personal__mark_seen
-personal__send
-work__list_messages
-work__search
-work__send
+mailboxes                   # discovery: list configured mailboxes + capabilities
+inbox                       # unified read across all IMAP mailboxes (mailbox= filter)
+list_folders                # (mailbox)
+list_messages               # (mailbox, folder, limit, search)
+search                      # (mailbox, from, subject, since, ...)
+get_message                 # (mailbox, uid)
+delete_message              # (mailbox, uid)
+mark_seen                   # (mailbox, uid, seen)
+send                        # (mailbox, to, subject, body_text/html, ...)
 ```
 
-The top-level `inbox` tool is the read entry point you actually want. An agent asking "what came in from `boss@corp.com`" calls `inbox(from="boss@corp.com")` instead of fanning out across N per-mailbox tools by itself. The tool set adapts to your config — if a mailbox has no IMAP, none of its IMAP tools show up.
+Discovery flow for an agent: call `mailboxes` to see what's available, then pass the chosen name (`"personal"`) or address (`"me@gmail.com"`) as the `mailbox` argument. For cross-account reads use `inbox` — `inbox(from="boss@corp.com")` fans out across every IMAP-enabled mailbox in one call. IMAP-only tools only appear if at least one mailbox has IMAP; same for SMTP. No dead buttons.
 
 There is **no stdio transport**. Point MCP clients at `$MAILBOX_URL/mcp`. The endpoint speaks the full streamable-HTTP protocol (`GET` opens SSE, `POST` sends requests, `DELETE` terminates the session). `.mcp.json` snippet:
 

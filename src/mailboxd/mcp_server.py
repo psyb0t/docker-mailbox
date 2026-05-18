@@ -1,8 +1,10 @@
 """MCP streamable-HTTP server exposing the same operations as the HTTP API.
 
-Tool naming: `<mailbox>__<verb>` so multiple mailboxes don't collide.
-The set of registered tools depends on which protocols each mailbox has
-configured (no IMAP → no list/fetch/delete tools for that mailbox).
+Tool design: ONE flat set of tools. Each operation that targets a specific
+mailbox takes a `mailbox` argument (mailbox name OR its address). This keeps
+the tool catalog constant-sized regardless of how many mailboxes are
+configured — agents discover available mailboxes via the `mailboxes` tool
+and pass the chosen one as a parameter.
 
 This module exposes a `StreamableHTTPSessionManager` and a lifespan helper
 that the FastAPI app mounts under `/mcp`. There is no stdio transport.
@@ -30,6 +32,15 @@ from .imap_client import search_messages as imap_search_messages
 from .imap_client import unified_search as imap_unified_search
 from .smtp_client import SmtpError
 from .smtp_client import send as smtp_send
+
+_MAILBOX_ARG: dict[str, Any] = {
+    "type": "string",
+    "description": (
+        "Target mailbox — accepts the mailbox `name` from config or its "
+        "email address (IMAP/SMTP username). Use the `mailboxes` tool to "
+        "discover what's available."
+    ),
+}
 
 _SEARCH_PROPS: dict[str, Any] = {
     "folder": {"type": "string"},
@@ -70,21 +81,84 @@ def _search_kwargs(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _resolve_mailbox(cfg: Config, ident: str) -> MailboxConfig:
+    """Look up a mailbox by name or by IMAP/SMTP username (address)."""
+    if not ident:
+        raise ValueError("`mailbox` is required")
+    for m in cfg.mailboxes:
+        if m.name == ident:
+            return m
+        if m.imap is not None and m.imap.username == ident:
+            return m
+        if m.smtp is not None and m.smtp.username == ident:
+            return m
+    raise ValueError(f"unknown mailbox: {ident!r}")
+
+
+def _require_imap(mb: MailboxConfig) -> Any:
+    if mb.imap is None:
+        raise ValueError(f"mailbox {mb.name!r} has no IMAP configured")
+    return mb.imap
+
+
+def _require_smtp(mb: MailboxConfig) -> Any:
+    if mb.smtp is None:
+        raise ValueError(f"mailbox {mb.name!r} has no SMTP configured")
+    return mb.smtp
+
+
 def _build_tools(
     cfg: Config,
 ) -> tuple[list[types.Tool], dict[str, Callable[[dict[str, Any]], Any]]]:
     tools: list[types.Tool] = []
     handlers: dict[str, Callable[[dict[str, Any]], Any]] = {}
 
-    _register_unified(cfg, tools, handlers)
+    # ── Discovery ────────────────────────────────────────────────────────
+    tools.append(
+        types.Tool(
+            name="mailboxes",
+            description=(
+                "List all configured mailboxes with their capabilities. "
+                "Each entry has `name`, `description`, `address` (the IMAP/SMTP "
+                "username if set), and booleans `imap`/`smtp` indicating which "
+                "protocols are wired up. Pass `name` or `address` as the "
+                "`mailbox` argument to other tools."
+            ),
+            inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
+        )
+    )
 
-    for mb in cfg.mailboxes:
-        prefix = mb.name
+    def _mailboxes(_args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        return {
+            "mailboxes": [
+                {
+                    "name": m.name,
+                    "description": m.description,
+                    "address": (
+                        m.imap.username if m.imap is not None
+                        else m.smtp.username if m.smtp is not None
+                        else None
+                    ),
+                    "imap": m.imap is not None,
+                    "smtp": m.smtp is not None,
+                }
+                for m in _c.mailboxes
+            ]
+        }
 
-        if mb.imap is not None:
-            _register_imap(prefix, mb, tools, handlers)
-        if mb.smtp is not None:
-            _register_smtp(prefix, mb, tools, handlers)
+    handlers["mailboxes"] = _mailboxes
+
+    # ── Unified inbox ────────────────────────────────────────────────────
+    if any(mb.imap is not None for mb in cfg.mailboxes):
+        _register_unified(cfg, tools, handlers)
+
+    # ── IMAP ops (only if at least one mailbox has IMAP) ─────────────────
+    if any(mb.imap is not None for mb in cfg.mailboxes):
+        _register_imap_tools(cfg, tools, handlers)
+
+    # ── SMTP ops (only if at least one mailbox has SMTP) ─────────────────
+    if any(mb.smtp is not None for mb in cfg.mailboxes):
+        _register_smtp_tools(cfg, tools, handlers)
 
     return tools, handlers
 
@@ -94,10 +168,6 @@ def _register_unified(
     tools: list[types.Tool],
     handlers: dict[str, Callable[[dict[str, Any]], Any]],
 ) -> None:
-    """Top-level unified-inbox tool that fans out across all IMAP mailboxes."""
-    if not any(mb.imap is not None for mb in cfg.mailboxes):
-        return
-
     schema_props: dict[str, Any] = {
         "mailbox": {
             "type": "string",
@@ -114,10 +184,10 @@ def _register_unified(
             name="inbox",
             description=(
                 "Unified inbox across all configured IMAP mailboxes. Returns a "
-                "merged, newest-first feed. Use `mailbox` to filter by mailbox "
-                "name or email address. Use `from`, `subject`, etc. to filter "
-                "content. Each result is tagged with its source `mailbox` and "
-                "`mailbox_address`."
+                "merged, newest-first feed. Use `mailbox` (CSV) to filter by "
+                "mailbox name or email address. Use `from`, `subject`, etc. to "
+                "filter content. Each result is tagged with its source `mailbox` "
+                "and `mailbox_address`."
             ),
             inputSchema={
                 "type": "object",
@@ -143,38 +213,41 @@ def _register_unified(
     handlers["inbox"] = _inbox
 
 
-def _register_imap(
-    prefix: str,
-    mb: MailboxConfig,
+def _register_imap_tools(
+    cfg: Config,
     tools: list[types.Tool],
     handlers: dict[str, Callable[[dict[str, Any]], Any]],
 ) -> None:
-    assert mb.imap is not None
-    imap = mb.imap
-
     tools.append(
         types.Tool(
-            name=f"{prefix}__list_folders",
-            description=f"List IMAP folders in mailbox '{mb.name}'.",
-            inputSchema={"type": "object", "properties": {}, "additionalProperties": False},
+            name="list_folders",
+            description="List IMAP folders in the given mailbox.",
+            inputSchema={
+                "type": "object",
+                "properties": {"mailbox": _MAILBOX_ARG},
+                "required": ["mailbox"],
+                "additionalProperties": False,
+            },
         )
     )
 
-    def _list_folders(_args: dict[str, Any], _i: Any = imap) -> dict[str, Any]:
-        return {"folders": imap_list_folders(_i)}
+    def _list_folders(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        mb = _resolve_mailbox(_c, str(args["mailbox"]))
+        return {"folders": imap_list_folders(_require_imap(mb))}
 
-    handlers[f"{prefix}__list_folders"] = _list_folders
+    handlers["list_folders"] = _list_folders
 
     tools.append(
         types.Tool(
-            name=f"{prefix}__list_messages",
+            name="list_messages",
             description=(
-                f"List recent messages from mailbox '{mb.name}'. "
-                "Returns newest-first headers; uid is what other tools want."
+                "List recent messages from a mailbox. Returns newest-first "
+                "headers; `uid` is what other tools want."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "mailbox": _MAILBOX_ARG,
                     "folder": {"type": "string", "description": "IMAP folder (default INBOX)"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
                     "search": {
@@ -183,131 +256,138 @@ def _register_imap(
                         "default": "ALL",
                     },
                 },
+                "required": ["mailbox"],
                 "additionalProperties": False,
             },
         )
     )
 
-    def _list_messages(args: dict[str, Any], _i: Any = imap) -> dict[str, Any]:
+    def _list_messages(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        mb = _resolve_mailbox(_c, str(args["mailbox"]))
         return {
             "messages": imap_list_messages(
-                _i,
+                _require_imap(mb),
                 folder=args.get("folder"),
                 limit=int(args.get("limit", 50)),
                 search=str(args.get("search", "ALL")),
             )
         }
 
-    handlers[f"{prefix}__list_messages"] = _list_messages
+    handlers["list_messages"] = _list_messages
 
     tools.append(
         types.Tool(
-            name=f"{prefix}__search",
+            name="search",
             description=(
-                f"Structured search in mailbox '{mb.name}'. Filter by from/to/"
+                "Structured search in a single mailbox. Filter by from/to/"
                 "subject/body/text/dates/flags/size. Returns newest-first headers."
             ),
             inputSchema={
                 "type": "object",
-                "properties": _SEARCH_PROPS,
+                "properties": {"mailbox": _MAILBOX_ARG, **_SEARCH_PROPS},
+                "required": ["mailbox"],
                 "additionalProperties": False,
             },
         )
     )
 
-    def _search(args: dict[str, Any], _i: Any = imap) -> dict[str, Any]:
-        return {"messages": imap_search_messages(_i, **_search_kwargs(args))}
+    def _search(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        mb = _resolve_mailbox(_c, str(args["mailbox"]))
+        return {"messages": imap_search_messages(_require_imap(mb), **_search_kwargs(args))}
 
-    handlers[f"{prefix}__search"] = _search
+    handlers["search"] = _search
 
     tools.append(
         types.Tool(
-            name=f"{prefix}__get_message",
-            description=f"Fetch a full message (incl. body) from mailbox '{mb.name}' by UID.",
+            name="get_message",
+            description="Fetch a full message (incl. body) from a mailbox by UID.",
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "mailbox": _MAILBOX_ARG,
                     "uid": {"type": "string"},
                     "folder": {"type": "string"},
                 },
-                "required": ["uid"],
+                "required": ["mailbox", "uid"],
                 "additionalProperties": False,
             },
         )
     )
 
-    def _get_message(args: dict[str, Any], _i: Any = imap) -> dict[str, Any]:
-        return imap_fetch(_i, str(args["uid"]), folder=args.get("folder"))
+    def _get_message(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        mb = _resolve_mailbox(_c, str(args["mailbox"]))
+        return imap_fetch(_require_imap(mb), str(args["uid"]), folder=args.get("folder"))
 
-    handlers[f"{prefix}__get_message"] = _get_message
+    handlers["get_message"] = _get_message
 
     tools.append(
         types.Tool(
-            name=f"{prefix}__delete_message",
-            description=f"Permanently delete a message (flag + expunge) in mailbox '{mb.name}'.",
+            name="delete_message",
+            description="Permanently delete a message (flag + expunge) in a mailbox.",
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "mailbox": _MAILBOX_ARG,
                     "uid": {"type": "string"},
                     "folder": {"type": "string"},
                 },
-                "required": ["uid"],
+                "required": ["mailbox", "uid"],
                 "additionalProperties": False,
             },
         )
     )
 
-    def _del(args: dict[str, Any], _i: Any = imap) -> dict[str, Any]:
-        imap_delete(_i, str(args["uid"]), folder=args.get("folder"))
+    def _del(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        mb = _resolve_mailbox(_c, str(args["mailbox"]))
+        imap_delete(_require_imap(mb), str(args["uid"]), folder=args.get("folder"))
         return {"ok": True}
 
-    handlers[f"{prefix}__delete_message"] = _del
+    handlers["delete_message"] = _del
 
     tools.append(
         types.Tool(
-            name=f"{prefix}__mark_seen",
-            description=f"Set or clear the \\Seen flag on a message in mailbox '{mb.name}'.",
+            name="mark_seen",
+            description="Set or clear the \\Seen flag on a message in a mailbox.",
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "mailbox": _MAILBOX_ARG,
                     "uid": {"type": "string"},
                     "folder": {"type": "string"},
                     "seen": {"type": "boolean", "default": True},
                 },
-                "required": ["uid"],
+                "required": ["mailbox", "uid"],
                 "additionalProperties": False,
             },
         )
     )
 
-    def _seen(args: dict[str, Any], _i: Any = imap) -> dict[str, Any]:
+    def _seen(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        mb = _resolve_mailbox(_c, str(args["mailbox"]))
         imap_mark_seen(
-            _i,
+            _require_imap(mb),
             str(args["uid"]),
             folder=args.get("folder"),
             seen=bool(args.get("seen", True)),
         )
         return {"ok": True}
 
-    handlers[f"{prefix}__mark_seen"] = _seen
+    handlers["mark_seen"] = _seen
 
 
-def _register_smtp(
-    prefix: str,
-    mb: MailboxConfig,
+def _register_smtp_tools(
+    cfg: Config,
     tools: list[types.Tool],
     handlers: dict[str, Callable[[dict[str, Any]], Any]],
 ) -> None:
-    assert mb.smtp is not None
-    smtp = mb.smtp
-
     tools.append(
         types.Tool(
-            name=f"{prefix}__send",
-            description=f"Send an email from mailbox '{mb.name}' via SMTP.",
+            name="send",
+            description="Send an email from a mailbox via SMTP.",
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "mailbox": _MAILBOX_ARG,
                     "to": {"type": "array", "items": {"type": "string"}, "minItems": 1},
                     "subject": {"type": "string"},
                     "body_text": {"type": "string"},
@@ -317,15 +397,16 @@ def _register_smtp(
                     "from_address": {"type": "string"},
                     "reply_to": {"type": "string"},
                 },
-                "required": ["to", "subject"],
+                "required": ["mailbox", "to", "subject"],
                 "additionalProperties": False,
             },
         )
     )
 
-    def _send(args: dict[str, Any], _s: Any = smtp) -> dict[str, Any]:
+    def _send(args: dict[str, Any], _c: Config = cfg) -> dict[str, Any]:
+        mb = _resolve_mailbox(_c, str(args["mailbox"]))
         return smtp_send(
-            _s,
+            _require_smtp(mb),
             to=list(args["to"]),
             subject=str(args["subject"]),
             body_text=args.get("body_text"),
@@ -336,7 +417,7 @@ def _register_smtp(
             reply_to=args.get("reply_to"),
         )
 
-    handlers[f"{prefix}__send"] = _send
+    handlers["send"] = _send
 
 
 def build_mcp_app(cfg: Config) -> Server:
@@ -356,7 +437,7 @@ def build_mcp_app(cfg: Config) -> Server:
             raise ValueError(f"unknown tool: {name}")
         try:
             result = fn(arguments or {})
-        except (ImapError, SmtpError) as e:
+        except (ImapError, SmtpError, ValueError) as e:
             return [types.TextContent(type="text", text=json.dumps({"error": str(e)}))]
         return [types.TextContent(type="text", text=json.dumps(result, default=str))]
 

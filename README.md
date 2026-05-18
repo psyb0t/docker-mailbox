@@ -28,7 +28,7 @@ Stdlib `imaplib` + `smtplib` under the hood, FastAPI on top, official MCP Python
 | Surface         | The goods                                                                                                                                       |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | **HTTP API**    | `GET /inbox` fans out across every account at once (filter by mailbox, sender, subject, date, flags…). Per-mailbox reads + deletes. SMTP send.   |
-| **MCP server**  | Streamable-HTTP MCP at `/mcp` — same port, same bearer, same boss. Tools are namespaced per mailbox (`<name>__list_messages`, `<name>__send`, …) so multiple accounts don't step on each other. |
+| **MCP server**  | Streamable-HTTP MCP at `/mcp` — same port, same bearer, same boss. A flat set of tools (`mailboxes`, `inbox`, `list_messages`, `send`, …) that take `mailbox` as a parameter. 100 accounts? Still one tool catalog. |
 | **Bearer auth** | One token list in YAML guards both the API and `/mcp`. Empty list = wide open (your problem). Multiple tokens = zero-downtime rotation.          |
 | **Protocols**   | IMAP (SSL / STARTTLS / plain), SMTP (SSL / STARTTLS / plain). Standards-boring on purpose.                                                       |
 | **Config**      | One YAML file. Add a mailbox, restart, done. Each one declares whichever subset of `{imap, smtp}` you actually care about.                       |
@@ -245,25 +245,23 @@ At least one of `body_text` / `body_html` is required. Both = `multipart/alterna
 
 ## MCP server
 
-Same operations as the HTTP API, exposed as MCP tools over **streamable HTTP** at `/mcp` (same port, same bearer). Tools are namespaced by mailbox so 12 inboxes don't turn into 12 colliding `list_messages` tools:
+Same operations as the HTTP API, exposed as MCP tools over **streamable HTTP** at `/mcp` (same port, same bearer). One flat tool set — every per-mailbox op takes `mailbox` as a parameter (name OR address), so 100 inboxes still ship the same handful of tools:
 
 ```
-inbox                       # the unified read tool — pass mailbox="..." to scope it
-personal__list_folders
-personal__list_messages
-personal__search            # structured single-mailbox search (from/subject/since/...)
-personal__get_message
-personal__delete_message
-personal__mark_seen
-personal__send
-work__list_messages
-work__search
-work__send
+mailboxes                   # discovery: list configured mailboxes + capabilities
+inbox                       # unified read across all IMAP mailboxes (mailbox= filter)
+list_folders                # (mailbox)
+list_messages               # (mailbox, folder, limit, search)
+search                      # (mailbox, from, subject, since, ...)
+get_message                 # (mailbox, uid)
+delete_message              # (mailbox, uid)
+mark_seen                   # (mailbox, uid, seen)
+send                        # (mailbox, to, subject, body_text/html, ...)
 ```
 
-The top-level `inbox` tool is the read entrypoint you actually want. An agent asking "what came in from `boss@corp.com`" calls `inbox(from="boss@corp.com")` instead of trying to fan out across N per-mailbox tools by itself.
+An agent finds what's available via `mailboxes`, then passes the chosen name (`"personal"`) or address (`"me@gmail.com"`) as the `mailbox` arg. For cross-account queries use `inbox` — `inbox(from="boss@corp.com")` fans out across every IMAP-enabled mailbox at once.
 
-The tool set is computed from your config — if a mailbox has no IMAP, none of its IMAP tools show up. No dead buttons.
+IMAP-only tools only appear if at least one mailbox has IMAP. Same for SMTP. No dead buttons.
 
 ### Transport
 
@@ -300,7 +298,7 @@ Drop the `headers` block if you're running without `auth.tokens`. Keep it if you
 │  MCP host  │───▶│  ─── shared ops ───      │
 │ (Claude…)  │    │                          │
 └────────────┘    │  /mcp  (streamable HTTP) │
-                  │  inbox / <name>__...     │
+                  │  mailboxes/inbox/send/…  │
                   └──────────────────────────┘
                               │
                               ▼
