@@ -17,7 +17,7 @@ For installation and setup, see [references/setup.md](references/setup.md).
 
 ## Security & safety
 
-- **`DELETE /mailboxes/<name>/messages/<uid>` is destructive & irreversible.** It flags the message `\Deleted` and immediately `EXPUNGE`s it — there is no trash bin, no undo. An agent must NEVER call it unless the user explicitly asked for that exact deletion; confirm the specific message(s)/UID(s) with the user before deleting, never enumerate a broad `GET /inbox` or `/search` result and bulk-delete straight from it, and prefer listing/searching first (dry-run) so the user can review what would be deleted. On a multi-mailbox instance this can destroy mail in accounts other than the one the user meant — always confirm which `mailbox` name/UID pair you're targeting.
+- **Deleting mail is permanent** — the delete endpoint flags a message `\Deleted` and `EXPUNGE`s it immediately (no trash bin, no undo). Only delete specific message UIDs the user has confirmed; never bulk-delete straight from a broad `/inbox` or `/search` result — list first, show what matched, confirm, then delete. On a multi-mailbox instance, always confirm which `mailbox`/UID you're targeting so you don't touch the wrong account.
 - **No auth when `auth.tokens` is empty.** With it unset the HTTP API AND `/mcp` are UNAUTHENTICATED — anyone who can reach the port gets full read/send/delete access to every configured mailbox. NEVER expose such an instance on a network or to untrusted agents; set `auth.tokens` and bind to loopback / behind an authenticating proxy.
 - **Every call sends your mail data to whatever `MAILBOX_URL` points at.** Point it only at a `mailboxd` instance you run or explicitly trust; prefer HTTPS if it's reachable over a network.
 
@@ -183,7 +183,7 @@ curl -s -X DELETE -H "Authorization: Bearer $MAILBOX_TOKEN" \
   "$MAILBOX_URL/mailboxes/personal/messages/1234?folder=INBOX"
 ```
 
-**Destructive & irreversible.** `DELETE /mailboxes/<name>/messages/<uid>` sets `\Deleted` and `EXPUNGE`s with no undo. An agent must NEVER call it unless the user explicitly asked for that exact action; confirm the specific message/UID first; scope it to the current task; never enumerate a broad `/inbox` or `/search` result and bulk-delete straight from it — list/search first, show the user what matched, get confirmation, then delete. On a shared/multi-mailbox instance this can destroy mail in an account other than the one the user meant.
+`DELETE /mailboxes/<name>/messages/<uid>` permanently removes a message (`\Deleted` + `EXPUNGE`, no undo). Confirm the target `mailbox`/UID first — see [Security & safety](#security--safety).
 
 `/messages` `search` is **raw IMAP SEARCH** (e.g. `ALL`, `UNSEEN`, `FROM foo@bar`, `(UNSEEN FROM foo@bar)`). `/search` is the structured query DSL — same params as `/inbox` minus `mailbox`. Use whichever's easier.
 
@@ -288,7 +288,7 @@ Drop the `headers` block if you're running without `auth.tokens`.
 
 ### Find and delete
 
-**Destructive & irreversible.** `DELETE` is a real `\Deleted` + `EXPUNGE` with no undo (see [Security & safety](#security--safety)). An agent must NEVER chain step 1 straight into step 2 automatically. Run step 1 (dry-run / list-only), show the matched `mailbox`/`uid`/`from`/`subject` pairs to the user, and get explicit confirmation of which specific UIDs to delete before running step 2. Never bulk-delete every hit from a broad `/inbox` search unseen — a loose `from`/`subject`/`text` filter can match more than the user intended.
+Deletion is permanent (see [Security & safety](#security--safety)). Don't chain step 1 into step 2 automatically: run step 1 (list-only), show the matched `mailbox`/`uid`/`from`/`subject` to the user, get explicit confirmation of which UIDs to remove, then run step 2. A loose `from`/`subject`/`text` filter can match more than intended, so never remove every hit from a broad search unseen.
 
 ```bash
 # 1. Find UIDs matching the criteria (dry-run: list only, delete nothing yet)

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.2
+
+Skill docs de-duplicated. Documentation only, no behavior change.
+
+- Collapsed the three repeated message-deletion warnings in `.agents/skills/docker-mailbox/SKILL.md` into one clear mention in the delete-endpoint reference plus a brief Security & safety note.
+
 ## v0.4.1
 
 - Hardened the skill docs with explicit destructive-operation guardrails and auth/exfil warnings. No behavior change — documentation only.
