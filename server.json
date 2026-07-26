@@ -1,0 +1,9 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.psyb0t/mailbox",
+  "title": "Mailbox",
+  "description": "Self-hosted MCP server for unified IMAP/SMTP mailbox access: read, list, and send email.",
+  "version": "0.0.0",
+  "repository": { "url": "https://github.com/psyb0t/docker-mailbox", "source": "github" },
+  "packages": [ { "registryType": "oci", "identifier": "docker.io/psyb0t/mailbox:latest", "runtimeHint": "docker", "transport": { "type": "streamable-http", "url": "http://localhost:8000/mcp" } } ]
+}

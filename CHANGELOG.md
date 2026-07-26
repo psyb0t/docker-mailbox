@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.4
+
+Listed on the official MCP Registry — no behavior change.
+
+- Added `server.json` — published to the official Model Context Protocol Registry (`registry.modelcontextprotocol.io`) as `io.github.psyb0t/mailbox`, pointing at the `psyb0t/mailbox` Docker image. Ownership is proven by an `io.modelcontextprotocol.server.name` LABEL on the image; publishing runs on tag pushes via GitHub OIDC (secretless). Also added a `glama.json` maintainer claim.
+
 ## v0.4.3
 
 Third-party license notices. Documentation only, no behavior change.
