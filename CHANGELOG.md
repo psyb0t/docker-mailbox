@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.3
+
+Third-party license notices. Documentation only, no behavior change.
+
+- Added `THIRD_PARTY.md` + `LICENSES/` documenting the GPL-3.0 `html2text` dependency bundled into the published image. The project's own code stays WTFPL.
+- gitignore the container-generated `CLAUDE.md` so it never ships.
+
 ## v0.4.2
 
 Skill docs de-duplicated. Documentation only, no behavior change.
