@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.6
+
+- Added a GitHub Actions CI status badge to the README.
+
 ## v0.4.5
 
 - Added self-hosted version and license badges plus a Docker Hub pulls badge; wired a badges job into pipeline.yml.
