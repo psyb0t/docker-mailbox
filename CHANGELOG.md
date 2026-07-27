@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.8
+
+Renames the plugin from `docker-mailbox` to `mailbox`. Metadata only, no behavior change.
+
+- **The install name is now `mailbox@psyb0t`.** v0.4.7 named the plugin after the repository, which made it the only entry in the `psyb0t` marketplace carrying a `docker-` prefix; every other plugin installs under its bare tool name. `mailbox` also matches the MCP-bridge plugin in `.agents/plugins/mailbox` and the container's own name.
+- The ClawHub skill is unaffected and stays `@psyb0t/docker-mailbox`, as does `openclaw plugins install clawhub:@psyb0t/mailbox`. Only the Claude Code / Codex plugin identifier changed.
+
 ## v0.4.7
 
 Agent-client distribution wiring. Documentation and metadata only, no behavior change.

@@ -311,7 +311,7 @@ The [skill](.agents/skills/docker-mailbox) works in any agent that reads `.agent
 
 ```bash
 claude plugin marketplace add psyb0t/agents
-claude plugin install docker-mailbox@psyb0t
+claude plugin install mailbox@psyb0t
 ```
 
 Claude Code prompts for the mailboxd URL and, if auth is enabled, the bearer token — the token is stored in your OS keychain.
