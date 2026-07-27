@@ -1,0 +1,11 @@
+{
+  "name": "docker-mailbox",
+  "version": "0.4.7",
+  "description": "Multi-mailbox IMAP/SMTP control plane exposed as a REST API and MCP server on a single port — read, search, send, mark-seen, and delete mail across multiple inboxes.",
+  "author": { "name": "psyb0t", "url": "https://github.com/psyb0t" },
+  "homepage": "https://github.com/psyb0t/docker-mailbox",
+  "repository": "https://github.com/psyb0t/docker-mailbox",
+  "license": "WTFPL",
+  "keywords": ["email", "imap", "smtp", "mailbox", "mcp", "rest-api", "self-hosted"],
+  "skills": "./skills/"
+}

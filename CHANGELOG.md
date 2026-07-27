@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.7
+
+Agent-client distribution wiring. Documentation and metadata only, no behavior change.
+
+- Added `.agents/.claude-plugin/plugin.json` and `.agents/.codex-plugin/plugin.json` so the existing `docker-mailbox` skill installs natively as a plugin in Claude Code and Codex, rooted at `.agents/`.
+- New `## Agent integrations` README section (with Table of Contents entry) documenting the `claude plugin` / `codex plugin` marketplace install commands, the OpenClaw skill install, and the OpenClaw MCP-bridge plugin install for `@psyb0t/mailbox`.
+
 ## v0.4.6
 
 - Added a GitHub Actions CI status badge to the README.

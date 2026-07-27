@@ -19,6 +19,7 @@ Stdlib `imaplib` + `smtplib` under the hood, FastAPI on top, official MCP Python
 - [HTTP API](#http-api)
   - [Authentication](#authentication)
 - [MCP server](#mcp-server)
+- [Agent integrations](#agent-integrations)
 - [Architecture](#architecture)
 - [Development](#development)
 - [License](#license)
@@ -301,6 +302,43 @@ Most MCP hosts take a `.mcp.json` (or equivalent) like this:
 ```
 
 Drop the `headers` block if you're running without `auth.tokens`. Keep it if you value sleep.
+
+## Agent integrations
+
+The [skill](.agents/skills/docker-mailbox) works in any agent that reads `.agents/skills/`, and installs natively in the clients below.
+
+### Claude Code
+
+```bash
+claude plugin marketplace add psyb0t/agents
+claude plugin install docker-mailbox@psyb0t
+```
+
+Claude Code prompts for the mailboxd URL and, if auth is enabled, the bearer token — the token is stored in your OS keychain.
+
+### Codex
+
+```bash
+codex plugin marketplace add psyb0t/agents
+```
+
+Codex also picks the skill up automatically in any repo containing `.agents/skills/`, and invokes it as `$docker-mailbox`.
+
+### OpenClaw
+
+The skill is published to ClawHub on every release:
+
+```bash
+openclaw skills install @psyb0t/docker-mailbox
+```
+
+For MCP clients that speak local stdio, the [`@psyb0t/mailbox`](.agents/plugins/mailbox) plugin bridges to mailboxd's `/mcp` endpoint:
+
+```bash
+openclaw plugins install clawhub:@psyb0t/mailbox
+```
+
+Then set `MAILBOX_URL` (and `MAILBOX_TOKEN` if the server was started with `auth.tokens` configured).
 
 ## Architecture
 
