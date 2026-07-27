@@ -320,9 +320,10 @@ Claude Code prompts for the mailboxd URL and, if auth is enabled, the bearer tok
 
 ```bash
 codex plugin marketplace add psyb0t/agents
+codex plugin add mailbox@psyb0t
 ```
 
-Codex also picks the skill up automatically in any repo containing `.agents/skills/`, and invokes it as `$docker-mailbox`.
+Installed via the marketplace, Codex invokes the skill as `$mailbox:docker-mailbox`. Codex also picks the skill up automatically, no install required, in any repo containing `.agents/skills/` — there it invokes as plain `$docker-mailbox`.
 
 ### OpenClaw
 

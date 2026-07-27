@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.9
+
+Codex install command was missing from the README. Documentation only, no behavior change.
+
+- The Codex subsection of `## Agent integrations` told readers to run `codex plugin marketplace add psyb0t/agents` and stopped there — it never showed the actual install command. Added `codex plugin add mailbox@psyb0t` right after it.
+- Clarified that the invocation form depends on how the skill was obtained: installed via the marketplace it's `$mailbox:docker-mailbox`; picked up automatically (no install) from a repo's own `.agents/skills/` it's plain `$docker-mailbox`.
+
 ## v0.4.8
 
 Renames the plugin from `docker-mailbox` to `mailbox`. Metadata only, no behavior change.
