@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.5
+
+- Added self-hosted version and license badges plus a Docker Hub pulls badge; wired a badges job into pipeline.yml.
+
 ## v0.4.4
 
 Listed on the official MCP Registry — no behavior change.

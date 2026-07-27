@@ -1,9 +1,8 @@
 # mailbox
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/psyb0t/mailbox)](https://hub.docker.com/r/psyb0t/mailbox)
-[![License: WTFPL](https://img.shields.io/badge/License-WTFPL-brightgreen.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688.svg)](https://fastapi.tiangolo.com/)
+[![version](https://raw.githubusercontent.com/psyb0t/docker-mailbox/badges/version.svg)](https://github.com/psyb0t/docker-mailbox/releases)
+[![license](https://raw.githubusercontent.com/psyb0t/docker-mailbox/badges/license.svg)](LICENSE)
+[![Docker Pulls](https://img.shields.io/docker/pulls/psyb0t/mailbox?style=flat-square)](https://hub.docker.com/r/psyb0t/mailbox)
 
 Your inboxes, on tap. Point this thing at as many email accounts as you want over IMAP + SMTP, and out the other end you get **one HTTP API and one MCP server, both on the same port** (MCP rides a streamable-HTTP channel at `/mcp`) so you can read mail, send mail, and nuke mail across every account from one place. No webmail. No database. No three-thousand-toggle desktop app. Just: "here's some email creds" → "now my agent / shell script / chaotic 3am curl pipeline can drive the inbox."
 
