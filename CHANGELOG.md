@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.12
+
+Fixes the CI lint failure introduced by v0.4.11 so the image builds and publishes.
+
+- v0.4.11 added `make lint` to CI for the first time, which surfaced a pre-existing flake8
+  E501: a 103-character line in `src/mailboxd/server.py`. The lint job failed and the image
+  build and publish steps, which depend on it, were skipped. Wrapped the line so flake8
+  passes. No behavior change.
+
 ## v0.4.11
 
 CI now lints, tests, and security-scans the code before building the image, via

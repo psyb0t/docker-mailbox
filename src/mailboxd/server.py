@@ -320,7 +320,9 @@ def create_app(config: Config | None = None) -> FastAPI:
         name: str = Path(...),
         uid: str = Path(...),
         folder: str | None = Query(None),
-        reader: bool = Query(False, description="Add `body_reader`: readable text/markdown from HTML"),
+        reader: bool = Query(
+            False, description="Add `body_reader`: readable text/markdown from HTML"
+        ),
     ) -> dict[str, Any]:
         mb = _resolve(cfg, name)
         _need(mb, "imap")
