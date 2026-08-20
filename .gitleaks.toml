@@ -1,0 +1,27 @@
+title = "docker-mailbox secret scanning"
+
+[extend]
+useDefault = true
+
+# gitleaks' `dir` mode walks the working tree and does NOT honour .gitignore, so
+# every gitignored path has to be named again here. It matters beyond noise:
+# config.yaml / config.yml hold the maintainer's REAL IMAP/SMTP credentials and
+# would fail every scan, and id_ed25519* are private keys. Nothing listed here
+# is tracked by git. Verify with `git check-ignore <path>` and
+# `git ls-files --error-unmatch <path>` before adding a line; an entry for a
+# COMMITTED path silences a real leak permanently.
+[[allowlists]]
+description = "Gitignored local config, keys, caches, and scan artifacts"
+paths = [
+  '''(^|/)config\.ya?ml$''',
+  '''(^|/)id_ed25519.*''',
+  '''(^|/)CLAUDE\.md$''',
+  '''(^|/)\.telemetry(?:/|$)''',
+  '''(^|/)\.venv(?:/|$)''',
+  '''(^|/)__pycache__(?:/|$)''',
+  '''(^|/)\.pytest_cache(?:/|$)''',
+  '''(^|/)\.mypy_cache(?:/|$)''',
+  '''(^|/)\.ruff_cache(?:/|$)''',
+  '''(^|/)sec\.sarif$''',
+  '''(^|/)git-update\.sh$''',
+]

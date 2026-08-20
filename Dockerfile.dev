@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
         gnupg \
+        jq \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg \
         | gpg --dearmor -o /etc/apt/keyrings/docker.gpg \
@@ -42,3 +43,15 @@ COPY pyproject.toml uv.lock* README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --group dev --no-install-project \
     || uv sync --group dev --no-install-project
+
+# Security scanners for `make sec`, isolated in their own venv so semgrep's
+# bundled mcp pin (mcp>=1.29) cannot collide with the project's mcp==1.9.0 in
+# /opt/venv. Reached only through the /usr/local/bin symlinks.
+RUN python3 -m venv /opt/sectools \
+    && /opt/sectools/bin/pip install --no-cache-dir \
+        semgrep==1.172.0 \
+        bandit==1.9.4 \
+        bandit-sarif-formatter==1.1.1 \
+        pip-audit==2.10.1 \
+    && ln -s /opt/sectools/bin/semgrep /opt/sectools/bin/bandit \
+        /opt/sectools/bin/pip-audit /usr/local/bin/

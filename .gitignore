@@ -73,3 +73,5 @@ id_ed25519*
 config.yaml
 config.yml
 CLAUDE.md
+.telemetry/
+sec.sarif

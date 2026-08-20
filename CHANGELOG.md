@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.11
+
+CI now lints, tests, and security-scans the code before building the image, via
+the generic reusable code-workflow.
+
+- New `code` pipeline job runs `make lint` (flake8 + mypy), `make test` (pytest
+  unit + docker-in-docker integration), and `make sec`, and the image build now
+  waits on it. The pipeline previously built and published the image without
+  running any of these.
+- New `make sec`: semgrep, bandit and pip-audit run in parallel and their
+  findings merge into `sec.sarif` for the GitHub Security tab. It never fails the
+  build; findings are reported, not gated. The scanners live in an isolated venv
+  in the dev image so semgrep's bundled mcp pin cannot collide with the project's
+  `mcp==1.9.0`.
+- Removed the `make check` alias; use `make lint`, `make test`, `make sec`.
+- Kept `.telemetry/` out of git and out of the image.
+
 ## v0.4.10
 
 CI plumbing only. No code in this repo changed — every commit in this release touches `.github/workflows/`.

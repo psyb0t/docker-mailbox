@@ -137,10 +137,10 @@ make dev-image               # build the sandboxed dev container
 make shell                   # drop into it
 make run                     # boot the server locally (mounts CONFIG=path/to/config.yaml)
 make test                    # full suite (unit + docker-in-docker integration)
-make test-unit               # in-process only — fast feedback
+make test-unit               # in-process only, fast feedback
 make lint                    # flake8 + mypy
+make sec                     # semgrep + bandit + pip-audit -> sec.sarif (reports, never fails)
 make format                  # isort + black
-make check                   # lint + tests
 ```
 
 ## Logs

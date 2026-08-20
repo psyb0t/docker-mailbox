@@ -43,7 +43,7 @@ DEV_RUN_DIND := docker run --rm \
 
 .PHONY: help dev-image shell \
         pkg-lock pkg-upgrade pkg-add pkg-remove pkg-update \
-        run test test-unit test-docker lint format check clean
+        run test test-unit test-docker lint format sec clean
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -118,7 +118,8 @@ format: dev-image ## Format
 	$(DEV_RUN) isort src tests
 	$(DEV_RUN) black src tests
 
-check: lint test ## Lint + all tests
+sec: dev-image ## Security scan (semgrep + bandit + pip-audit, parallel) -> sec.sarif for the Security tab; reports, never fails
+	$(DEV_RUN) bash scripts/sec.sh
 
 clean: ## Remove build / cache artifacts (host-side)
 	rm -rf build dist *.egg-info .pytest_cache .mypy_cache .ruff_cache .venv
