@@ -57,6 +57,11 @@ ANUSTIMES_*.md
 *.swo
 
 # Local scratch / research
+AGENTS.md
+CODEX.local.md
+.agent_notes/
+.agent_knowledge/
+.testing/
 .research_files
 *.local
 *.bak

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from mailboxd import __version__
 from mailboxd.config import load_config
 from mailboxd.server import create_app
 
@@ -27,7 +28,7 @@ def test_health(tmp_path: Path) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
-    assert isinstance(body["version"], str)
+    assert body["version"] == __version__
 
 
 def test_list_mailboxes(tmp_path: Path) -> None:

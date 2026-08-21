@@ -146,7 +146,7 @@ Everything's JSON. Errors look like `{"detail": "..."}`:
 ### `GET /health`
 
 ```json
-{ "ok": true, "version": "0.1.0" }
+{ "ok": true, "version": "0.4.14" }
 ```
 
 Always open, no bearer required. Point your liveness probe at this and forget about it.

@@ -19,10 +19,10 @@ import imaplib
 from pathlib import Path
 from typing import Any, Callable
 
+import imap_mock
 import pytest
 from fastapi.testclient import TestClient
 
-import imap_mock
 from mailboxd.config import ImapConfig, load_config
 from mailboxd.imap_client import (
     ImapError,

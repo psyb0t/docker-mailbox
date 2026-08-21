@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.14
+
+Refreshes the MCP stack and locks the Python dependency graph.
+
+- Upgraded the MCP SDK to 1.28.1 and Black to 26.3.1. Both runtime and
+  development images now install strictly from `uv.lock`; they no longer fall
+  back to an unlocked resolution.
+- Added a Streamable HTTP MCP contract test that initializes the mounted route,
+  lists the exposed tools, and calls `mailboxes` through the real application.
+- Package commands now update exact pins correctly and support the `dev` group,
+  so a development-only tool does not collide with runtime dependencies.
+- Aligned Python runtime, package, health-response example, and Codex plugin
+  version declarations with the release tag.
+
 ## v0.4.13
 
 Fixes an IMAP command injection vulnerability (issue #1). Closes #1.

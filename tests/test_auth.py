@@ -9,23 +9,19 @@ from mailboxd.server import create_app
 
 
 def _write_cfg(tmp_path: Path, tokens: list[str]) -> Path:
-    tokens_yaml = (
-        "\n".join(f'    - "{t}"' for t in tokens) if tokens else "    []"
-    )
+    tokens_yaml = "\n".join(f'    - "{t}"' for t in tokens) if tokens else "    []"
     if not tokens:
         auth_block = "auth: {tokens: []}"
     else:
         auth_block = "auth:\n  tokens:\n" + tokens_yaml
     p = tmp_path / "config.yaml"
-    p.write_text(
-        f"""
+    p.write_text(f"""
 {auth_block}
 mailboxes:
   - name: alpha
     imap: {{host: imap.example.com, username: u, password: p}}
     smtp: {{host: smtp.example.com, username: u, password: p, from_address: u@example.com}}
-"""
-    )
+""")
     return p
 
 

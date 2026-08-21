@@ -10,6 +10,7 @@ sarif_out="${SARIF_OUT:-sec.sarif}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# shellcheck disable=SC2016 # `$schema` is a literal SARIF field name.
 empty_sarif='{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[]}'
 
 # --- run the three scanners in parallel -------------------------------------
@@ -24,13 +25,15 @@ empty_sarif='{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.
 (bandit -r src -f sarif -o "$work/bandit.sarif" \
 	>"$work/bandit.log" 2>&1 || true) &
 
-# pip-audit: CVEs in the production deps. The repo pins in pyproject.toml with
-# no uv.lock, so resolve them to a pinned requirements file with uv (honors the
-# [tool.uv] exclude-newer gate); pip-audit does not read pyproject/uv.lock
-# itself. Emit JSON, converted to SARIF below.
-(uv pip compile pyproject.toml --quiet -o "$work/reqs.txt" 2>"$work/uv.log" &&
-	pip-audit -r "$work/reqs.txt" --format json --output "$work/pip-audit.json" \
-		>"$work/pip-audit.log" 2>&1 || true) &
+# pip-audit: CVEs in the production deps. Resolve the locked production graph
+# with uv, which honors the [tool.uv] exclude-newer gate. pip-audit does not
+# consume uv.lock directly. Emit JSON, converted to SARIF below.
+(
+	if uv pip compile pyproject.toml --quiet -o "$work/reqs.txt" 2>"$work/uv.log"; then
+		pip-audit -r "$work/reqs.txt" --format json --output "$work/pip-audit.json" \
+			>"$work/pip-audit.log" 2>&1 || true
+	fi
+) &
 
 wait
 

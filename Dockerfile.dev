@@ -41,12 +41,11 @@ WORKDIR /work
 # PYTHONPATH=/work/src.
 COPY pyproject.toml uv.lock* README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --group dev --no-install-project \
-    || uv sync --group dev --no-install-project
+    uv sync --frozen --group dev --no-install-project
 
-# Security scanners for `make sec`, isolated in their own venv so semgrep's
-# bundled mcp pin (mcp>=1.29) cannot collide with the project's mcp==1.9.0 in
-# /opt/venv. Reached only through the /usr/local/bin symlinks.
+# Security scanners for `make sec`, isolated from the application environment
+# because semgrep brings its own MCP dependency. Reached only through the
+# /usr/local/bin symlinks.
 RUN python3 -m venv /opt/sectools \
     && /opt/sectools/bin/pip install --no-cache-dir \
         semgrep==1.172.0 \

@@ -24,6 +24,10 @@ env/
 .coverage.*
 htmlcov/
 coverage.xml
+coverage.txt
+coverage.out
+profile.out
+.cover/
 .tox/
 .nox/
 
@@ -42,6 +46,14 @@ coverage.xml
 
 # Local scratch
 .research_files/
+.agent_notes/
+.agent_knowledge/
+CODEX.local.md
+PLAN.md
+implplan.md
+NOTES.md
+TODO.md
+WIP.md
 *.local
 *.bak
 *.orig
@@ -73,5 +85,8 @@ id_ed25519*
 config.yaml
 config.yml
 CLAUDE.md
+AGENTS.md
 .telemetry/
 sec.sarif
+
+.testing/

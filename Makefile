@@ -5,6 +5,8 @@ DEV_IMAGE := psyb0t/mailboxd-dev:latest
 
 PYPROJECT := pyproject.toml
 BUMP_HOST := bash scripts/bump_exclude_newer.sh $(PYPROJECT)
+GROUP ?=
+UV_GROUP := $(if $(GROUP),$(if $(filter dev,$(GROUP)),--group dev,$(error GROUP must be empty or dev)),)
 
 # Sandbox: everything dev-side runs INSIDE the dev image. The full env is
 # baked into /opt/venv at image build time, so the host bind-mount stays
@@ -72,20 +74,20 @@ pkg-upgrade: dev-image ## Bump exclude-newer + refresh lock with newest pins
 	$(BUMP_HOST)
 	$(DEV_RUN) uv lock --upgrade
 
-pkg-add: dev-image ## Add a package (usage: make pkg-add PKG=name[==ver])
-	@test -n "$(PKG)" || (echo "usage: make pkg-add PKG=name[==ver]" >&2; exit 1)
+pkg-add: dev-image ## Add a package (usage: make pkg-add PKG=name[==ver] [GROUP=dev])
+	@test -n "$(PKG)" || (echo "usage: make pkg-add PKG=name[==ver] [GROUP=dev]" >&2; exit 1)
 	$(BUMP_HOST)
-	$(DEV_RUN) uv add --no-sync $(PKG)
+	$(DEV_RUN) uv add --no-sync $(UV_GROUP) $(PKG)
 
-pkg-remove: dev-image ## Remove a package (usage: make pkg-remove PKG=name)
-	@test -n "$(PKG)" || (echo "usage: make pkg-remove PKG=name" >&2; exit 1)
+pkg-remove: dev-image ## Remove a package (usage: make pkg-remove PKG=name [GROUP=dev])
+	@test -n "$(PKG)" || (echo "usage: make pkg-remove PKG=name [GROUP=dev]" >&2; exit 1)
 	$(BUMP_HOST)
-	$(DEV_RUN) uv remove --no-sync $(PKG)
+	$(DEV_RUN) uv remove --no-sync $(UV_GROUP) $(PKG)
 
-pkg-update: dev-image ## Upgrade a package (usage: make pkg-update PKG=name)
-	@test -n "$(PKG)" || (echo "usage: make pkg-update PKG=name" >&2; exit 1)
+pkg-update: dev-image ## Update a package (usage: make pkg-update PKG=name V=version [GROUP=dev])
+	@test -n "$(PKG)" && test -n "$(V)" || (echo "usage: make pkg-update PKG=name V=version [GROUP=dev]" >&2; exit 1)
 	$(BUMP_HOST)
-	$(DEV_RUN) uv lock --upgrade-package $(PKG)
+	$(DEV_RUN) uv add --no-sync $(UV_GROUP) $(PKG)==$(V)
 
 # -----------------------------------------------------------------------------
 # Run / test / quality — `dev-image` dep means lockfile changes auto-apply.

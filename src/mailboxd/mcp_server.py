@@ -135,9 +135,9 @@ def _build_tools(
                     "name": m.name,
                     "description": m.description,
                     "address": (
-                        m.imap.username if m.imap is not None
-                        else m.smtp.username if m.smtp is not None
-                        else None
+                        m.imap.username
+                        if m.imap is not None
+                        else m.smtp.username if m.smtp is not None else None
                     ),
                     "imap": m.imap is not None,
                     "smtp": m.smtp is not None,

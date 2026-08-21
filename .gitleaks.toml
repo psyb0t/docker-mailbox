@@ -10,18 +10,28 @@ useDefault = true
 # is tracked by git. Verify with `git check-ignore <path>` and
 # `git ls-files --error-unmatch <path>` before adding a line; an entry for a
 # COMMITTED path silences a real leak permanently.
-[[allowlists]]
+[allowlist]
 description = "Gitignored local config, keys, caches, and scan artifacts"
 paths = [
   '''(^|/)config\.ya?ml$''',
   '''(^|/)id_ed25519.*''',
   '''(^|/)CLAUDE\.md$''',
-  '''(^|/)\.telemetry(?:/|$)''',
-  '''(^|/)\.venv(?:/|$)''',
-  '''(^|/)__pycache__(?:/|$)''',
-  '''(^|/)\.pytest_cache(?:/|$)''',
-  '''(^|/)\.mypy_cache(?:/|$)''',
-  '''(^|/)\.ruff_cache(?:/|$)''',
+  '''(^|/)AGENTS\.md$''',
+  '''(^|/)CODEX\.local\.md$''',
+  '''(^|/)PLAN\.md$''',
+  '''(^|/)implplan\.md$''',
+  '''(^|/)NOTES\.md$''',
+  '''(^|/)TODO\.md$''',
+  '''(^|/)WIP\.md$''',
+  '''(^|/)\.agent_(notes|knowledge)(/|$)''',
+  '''(^|/)\.research_files(/|$)''',
+  '''(^|/)\.testing(/|$)''',
+  '''(^|/)\.telemetry(/|$)''',
+  '''(^|/)\.venv(/|$)''',
+  '''(^|/)__pycache__(/|$)''',
+  '''(^|/)\.pytest_cache(/|$)''',
+  '''(^|/)\.mypy_cache(/|$)''',
+  '''(^|/)\.ruff_cache(/|$)''',
   '''(^|/)sec\.sarif$''',
   '''(^|/)git-update\.sh$''',
 ]
