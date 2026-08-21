@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import email
 import imaplib
+import re
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from email.header import decode_header, make_header
@@ -41,6 +42,32 @@ def _html_to_reader(html: str) -> str:
 
 class ImapError(Exception):
     """Raised when an IMAP operation fails."""
+
+
+# IMAP command lines are CRLF-delimited and its atoms/quoted-strings cannot
+# contain CR, LF or NUL. Python's imaplib passes caller-supplied arguments to
+# the server verbatim (no sanitization), so a CR/LF smuggled into a
+# folder/uid/search value would terminate the current command and inject an
+# additional, attacker-chosen IMAP command onto the same authenticated
+# connection (issue #1: command injection, incl. STORE+EXPUNGE through a
+# read-only GET route). Reject those bytes at the boundary, before any value
+# reaches imaplib.
+_FORBIDDEN_CHARS = ("\r", "\n", "\x00")
+
+# A UID (or sequence-set) is only ever digits and the range punctuation
+# `,` `:` `*`. Anything else cannot be a valid UID and is refused outright,
+# which also makes UID values injection-proof by construction.
+_UID_RE = re.compile(r"^[0-9][0-9,:*]*$")
+
+
+def _reject_control_chars(value: str, field: str) -> None:
+    if any(ch in value for ch in _FORBIDDEN_CHARS):
+        raise ImapError(f"invalid {field}: control characters are not allowed")
+
+
+def _validate_uid(uid: str) -> None:
+    if not _UID_RE.match(uid):
+        raise ImapError(f"invalid uid: {uid!r}")
 
 
 @contextmanager
@@ -79,7 +106,11 @@ def _decode(s: Any) -> str:
 
 
 def _select(conn: imaplib.IMAP4, folder: str, readonly: bool = False) -> None:
-    typ, _ = conn.select(f'"{folder}"', readonly=readonly)
+    _reject_control_chars(folder, "folder")
+    # Send the name as a properly-escaped IMAP quoted string so an embedded
+    # `"` or `\` cannot break out of the quoting either.
+    escaped = folder.replace("\\", "\\\\").replace('"', '\\"')
+    typ, _ = conn.select(f'"{escaped}"', readonly=readonly)
     if typ != "OK":
         raise ImapError(f"could not select folder {folder!r}")
 
@@ -127,6 +158,7 @@ def build_search_criteria(
     crit: list[str | bytes] = []
 
     def _q(value: str) -> str | bytes:
+        _reject_control_chars(value, "search term")
         # IMAP atoms must be quoted strings or literals. imaplib quotes
         # automatically when the value is a plain `str`, but trips on
         # non-ASCII. For non-ASCII we hand back a literal byte token.
@@ -156,8 +188,10 @@ def build_search_criteria(
     if text:
         _add_text("TEXT", text)
     if since:
+        _reject_control_chars(since, "since")
         crit.extend(["SINCE", since])
     if before:
+        _reject_control_chars(before, "before")
         crit.extend(["BEFORE", before])
     if unseen:
         crit.append("UNSEEN")
@@ -197,6 +231,8 @@ def list_messages(
     search: str = "ALL",
 ) -> list[dict[str, Any]]:
     folder = folder or cfg.default_folder
+    _reject_control_chars(folder, "folder")
+    _reject_control_chars(search, "search")
     with _connect(cfg) as conn:
         _select(conn, folder, readonly=True)
         uids = _uid_search(conn, search)
@@ -214,6 +250,7 @@ def search_messages(
     Accepts the same keyword arguments as `build_search_criteria`.
     """
     folder = folder or cfg.default_folder
+    _reject_control_chars(folder, "folder")
     spec = build_search_criteria(**criteria)
     with _connect(cfg) as conn:
         _select(conn, folder, readonly=True)
@@ -296,6 +333,8 @@ def fetch_message(
     reader: bool = False,
 ) -> dict[str, Any]:
     folder = folder or cfg.default_folder
+    _validate_uid(uid)
+    _reject_control_chars(folder, "folder")
     with _connect(cfg) as conn:
         _select(conn, folder, readonly=True)
         typ, data = conn.uid("FETCH", uid, "(RFC822)")
@@ -375,6 +414,8 @@ def _payload_str(part: Message) -> str:
 
 def delete_message(cfg: ImapConfig, uid: str, folder: str | None = None) -> None:
     folder = folder or cfg.default_folder
+    _validate_uid(uid)
+    _reject_control_chars(folder, "folder")
     with _connect(cfg) as conn:
         _select(conn, folder, readonly=False)
         typ, _ = conn.uid("STORE", uid, "+FLAGS", r"(\Deleted)")
@@ -432,6 +473,8 @@ def unified_search(
 
 def mark_seen(cfg: ImapConfig, uid: str, folder: str | None = None, seen: bool = True) -> None:
     folder = folder or cfg.default_folder
+    _validate_uid(uid)
+    _reject_control_chars(folder, "folder")
     flag_op = "+FLAGS" if seen else "-FLAGS"
     with _connect(cfg) as conn:
         _select(conn, folder, readonly=False)

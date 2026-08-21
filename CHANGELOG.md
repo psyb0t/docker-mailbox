@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.4.13
+
+Fixes an IMAP command injection vulnerability (issue #1). Closes #1.
+
+- The `folder`, `uid` and `search` values that reach the IMAP client were
+  string-interpolated into IMAP commands and handed to Python's `imaplib`,
+  which does not sanitize its own arguments. A CR/LF in any of them (reachable
+  from an ordinary `%0D%0A` in an HTTP query or path parameter) ended the
+  current command and spliced a second, attacker-chosen IMAP command onto the
+  same authenticated connection, including a `STORE +FLAGS (\Deleted)` +
+  `EXPUNGE` pair that deletes a whole folder through the read-only message
+  routes.
+- Every such value is now validated before it reaches `imaplib`: `folder`,
+  `search` and structured search terms (including `since`/`before`) reject CR,
+  LF and NUL; `uid` must be digits and sequence-set punctuation only; and
+  folder names have any embedded `"` and `\` escaped so they cannot break out
+  of the IMAP quoted string. The checks live in `imap_client`, so both the
+  HTTP API and the MCP server inherit them.
+- Added an in-process mock IMAP server and an IMAP test suite: the happy path
+  (list, fetch, structured search) plus the injection cases, including the
+  verbatim issue #1 payload driven through the read-only GET route.
+
 ## v0.4.12
 
 Fixes the CI lint failure introduced by v0.4.11 so the image builds and publishes.
