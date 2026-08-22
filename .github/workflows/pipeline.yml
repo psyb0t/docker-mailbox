@@ -6,7 +6,7 @@ jobs:
   code:
     permissions:
       contents: read
-      security-events: write # code-workflow declares it for the sec SARIF upload; a caller must grant at least what the reusable workflow requests or the run fails at startup
+      security-events: write # for the sec SARIF upload
     uses: psyb0t/reusable-github-workflows/.github/workflows/code-workflow.yml@master
     with:
       lint_command: "make lint" # flake8 + mypy
