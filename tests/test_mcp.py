@@ -11,6 +11,7 @@ from mailboxd.config import load_config
 from mailboxd.server import create_app
 
 _MCP_PATH = "/mcp"
+_MCP_PATH_WITH_TRAILING_SLASH = f"{_MCP_PATH}/"
 _JSONRPC_VERSION = "2.0"
 _SSE_DATA_PREFIX = "data: "
 _TEST_TOKEN = "test-token"
@@ -33,7 +34,10 @@ mailboxes:
     smtp: {{host: smtp.example.com, username: alpha@example.com, password: p,
       from_address: alpha@example.com}}
 """)
-    return TestClient(create_app(load_config(str(config_path))))
+    return TestClient(
+        create_app(load_config(str(config_path))),
+        follow_redirects=False,
+    )
 
 
 def _mcp_payload(response: Response) -> dict[str, Any]:
@@ -63,6 +67,38 @@ def _mcp_request(
         },
     )
     return _mcp_payload(response)
+
+
+def _initialize_request(client: TestClient, path: str) -> Response:
+    return client.post(
+        path,
+        headers=_HEADERS,
+        json={
+            "jsonrpc": _JSONRPC_VERSION,
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "mailboxd-test", "version": "1"},
+            },
+        },
+    )
+
+
+def test_mcp_documented_path_is_not_redirected(tmp_path: Path) -> None:
+    with _client(tmp_path) as client:
+        response = _initialize_request(client, _MCP_PATH)
+
+    assert response.status_code == 200
+    assert "location" not in response.headers
+
+
+def test_mcp_trailing_slash_path_remains_available(tmp_path: Path) -> None:
+    with _client(tmp_path) as client:
+        response = _initialize_request(client, _MCP_PATH_WITH_TRAILING_SLASH)
+
+    assert response.status_code == 200
 
 
 def test_streamable_http_mcp_initializes_lists_tools_and_calls_mailboxes(

@@ -77,6 +77,10 @@ def _need(mb: MailboxConfig, proto: str) -> None:
 
 
 _AUTH_EXEMPT_PATHS = frozenset({"/health"})
+_MCP_PATH = "/mcp"
+_MCP_PATH_WITH_TRAILING_SLASH = f"{_MCP_PATH}/"
+_MCP_RAW_PATH = _MCP_PATH.encode("ascii")
+_MCP_RAW_PATH_WITH_TRAILING_SLASH = _MCP_PATH_WITH_TRAILING_SLASH.encode("ascii")
 
 
 def _bearer_ok(cfg: Config, scope: Scope) -> bool:
@@ -111,6 +115,24 @@ async def _send_401(send: Send) -> None:
         }
     )
     await send({"type": "http.response.body", "body": body})
+
+
+class _MCPSlashNormalizer:
+    """Route the documented MCP path to the mounted Streamable HTTP handler."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("path") != _MCP_PATH:
+            await self._app(scope, receive, send)
+            return
+
+        normalized_scope = dict(scope)
+        normalized_scope["path"] = _MCP_PATH_WITH_TRAILING_SLASH
+        if scope.get("raw_path") == _MCP_RAW_PATH:
+            normalized_scope["raw_path"] = _MCP_RAW_PATH_WITH_TRAILING_SLASH
+        await self._app(normalized_scope, receive, send)
 
 
 class _BearerASGI:
@@ -160,8 +182,9 @@ def create_app(config: Config | None = None) -> FastAPI:
         lifespan=_lifespan,
     )
 
-    app.router.routes.append(Mount("/mcp", app=mcp_manager.handle_request))
+    app.router.routes.append(Mount(_MCP_PATH, app=mcp_manager.handle_request))
 
+    app.add_middleware(_MCPSlashNormalizer)
     app.add_middleware(_BearerASGI, cfg=cfg)
 
     @app.get("/health", response_model=HealthResponse)

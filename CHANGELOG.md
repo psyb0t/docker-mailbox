@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.15
+
+Fixes the documented `/mcp` endpoint for Streamable HTTP clients that do not
+follow redirects.
+
+- `POST /mcp` returned `307` to `/mcp/` because the raw ASGI mount matched only
+  the slash form. This broke MCP clients that retain the documented `/mcp` URL
+  and do not follow redirects on Streamable HTTP requests.
+- The app now normalizes only the exact `/mcp` path before routing. Bearer auth
+  remains outermost, `/mcp/` still works, and the other HTTP routes keep their
+  existing slash behavior.
+- MCP contract tests now disable redirect following and cover both endpoint
+  forms, so another redirect cannot pass unnoticed.
+- Removed stale wording from the CI workflow comment. No behavior change.
+
 ## v0.4.14
 
 Refreshes the MCP stack and locks the Python dependency graph.
