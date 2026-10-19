@@ -21,9 +21,10 @@ Then either:
 # Plain docker run
 docker run --rm -p 127.0.0.1:8000:8000 \
   -v "$PWD/config.yaml:/etc/mailboxd/config.yaml:ro" \
+  -v mailboxd-state:/var/lib/mailboxd \
   psyb0t/mailbox:latest
 
-# Or edit Compose ports to 127.0.0.1:${PORT:-8000}:8000 first:
+# Or Compose (publishes on 127.0.0.1:${PORT:-8000} and creates the state volume):
 docker compose up -d
 ```
 
@@ -44,12 +45,19 @@ One YAML file. Lives at `MAILBOXD_CONFIG`, or `--config`, or `/etc/mailboxd/conf
 log_level: INFO
 
 # Bearer-token gate. Guards the HTTP API AND /mcp. Empty / missing denies access.
-# Multi-token list = rotate without downtime: add a new one, swap clients
-# over, retire the old one.
+# Each token has a name, scopes (read | draft | organize | send | delete | admin)
+# and the mailboxes it may use. Several tokens = rotate without downtime.
 auth:
   tokens:
-    - "long-random-token-1"        # generate with: openssl rand -hex 32
-    # - "long-random-token-2"
+    - name: mila
+      token: ${MAILBOXD_TOKEN_MILA}   # generate with: openssl rand -hex 32
+      scopes: [read, draft, organize]
+      mailboxes: [personal]           # or "*"
+    # - "legacy-bare-token"           # all scopes on all mailboxes (logs a warning)
+
+# SQLite state (audit log, send limits, checkpoints): mount a volume on /var/lib/mailboxd
+state:
+  path: /var/lib/mailboxd/state.db
 
 mailboxes:
   - name: personal                  # URL-safe handle; matches [a-zA-Z0-9_-]+, must be unique
@@ -112,10 +120,10 @@ If replacing the image command with `mailboxd http`, pass `--host 0.0.0.0`; othe
 
 ## Auth
 
-Every request except `GET /health` must carry a token from `auth.tokens`:
+Every request except `GET /health` must carry a token configured under `auth.tokens`:
 
 ```
-Authorization: Bearer <one of auth.tokens>
+Authorization: Bearer <a configured token>
 ```
 
 - Missing / malformed / wrong token → `401` with `WWW-Authenticate: Bearer`.
@@ -123,7 +131,7 @@ Authorization: Bearer <one of auth.tokens>
 - The same gate covers `/mcp` — there's no second auth system to learn.
 - Multiple tokens in the list let you rotate without downtime: add the new one, switch clients over, remove the old one.
 
-When `auth.tokens` is empty or omitted, protected requests return `401`; only `/health` remains available. Add a token and restart to use the API or MCP. Every configured token accesses every mailbox. Use separate instances and credentials when different users need isolated mailbox access.
+When `auth.tokens` is empty or omitted, protected requests return `401`; only `/health` remains available. Add a token and restart to use the API or MCP. A token only does what its `scopes` allow and only sees the mailboxes in its `mailboxes` list (a hidden mailbox answers `404`, like a missing one); a bare-string token holds every scope on every mailbox. Give agents the narrowest scopes they need, typically `read`, `draft`, `organize`.
 
 ## Management
 

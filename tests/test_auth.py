@@ -2,10 +2,17 @@
 
 from pathlib import Path
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from mailboxd.config import load_config
 from mailboxd.server import create_app
+
+
+@pytest.fixture(autouse=True)
+def _state_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MAILBOXD_STATE_PATH", str(tmp_path / "state.db"))
 
 
 def _write_cfg(tmp_path: Path, tokens: list[str]) -> Path:

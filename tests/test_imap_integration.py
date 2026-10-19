@@ -21,12 +21,14 @@ from typing import Any, Callable
 
 import imap_mock
 import pytest
+
+from mailboxd import imap_client
 from fastapi.testclient import TestClient
 
 from mailboxd.config import ImapConfig, load_config
 from mailboxd.imap_client import (
     ImapError,
-    delete_message,
+    store_flags,
     fetch_message,
     list_messages,
     search_messages,
@@ -89,7 +91,8 @@ def test_fetch_message_parses_body(imap_factory: Factory) -> None:
     out = fetch_message(_cfg(host, port), uid="1")
     assert out["subject"] == "Hello"
     assert "hello from the mock imap server" in (out["body_text"] or "")
-    assert any("UID FETCH 1 (RFC822)" in c for c in sink.commands)
+    assert any("UID FETCH 1 (BODY.PEEK[])" in c for c in sink.commands)
+    assert not any("RFC822" in c for c in sink.commands)
 
 
 def test_search_messages_structured(imap_factory: Factory) -> None:
@@ -117,7 +120,11 @@ def test_uid_crlf_injection_is_rejected(imap_factory: Factory) -> None:
     with pytest.raises(ImapError):
         fetch_message(_cfg(host, port), uid="1\r\nZ99 UID STORE 1 +FLAGS (\\Deleted)")
     with pytest.raises(ImapError):
-        delete_message(_cfg(host, port), uid="1\r\nZ99 EXPUNGE")
+        store_flags(_cfg(host, port), "1\r\nZ99 EXPUNGE", add=["\\Deleted"])
+    with pytest.raises(ImapError):
+        with imap_client.session(_cfg(host, port)) as s:
+            s.select("INBOX", readonly=False)
+            s.move("1\r\nZ99 EXPUNGE", "Trash")
     assert _no_destructive(sink.commands)
 
 
@@ -164,6 +171,11 @@ def test_mock_detects_injected_command_via_raw_imaplib(imap_factory: Factory) ->
 # --------------------------------------------------------------------------
 # End-to-end: the read-only GET route the PoC abused
 # --------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _state_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MAILBOXD_STATE_PATH", str(tmp_path / "state.db"))
 
 
 def _http_client(tmp_path: Path, host: str, port: int) -> TestClient:

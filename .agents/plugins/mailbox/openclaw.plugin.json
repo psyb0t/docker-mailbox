@@ -3,8 +3,8 @@
   "id": "@psyb0t/mailbox",
   "version": "0.0.0",
   "type": "code-plugin",
-  "summary": "Wire an OpenClaw agent to a self-hosted docker-mailbox IMAP/SMTP control plane over MCP — read, search, send, mark-seen, and delete mail across multiple inboxes.",
-  "description": "A thin stdio<->HTTP bridge that connects an MCP client (OpenClaw, Claude, Cursor, Codex, ...) to a running docker-mailbox instance's MCP endpoint (/mcp), exposing its tools: mailboxes (discovery), inbox (unified cross-account read), list_folders, list_messages, search, get_message, delete_message, mark_seen, and send. docker-mailbox is a multi-mailbox IMAP/SMTP control plane exposed as a REST API + MCP server on a single port. It is self-hosted — you run the server yourself and point this bridge at it. See https://github.com/psyb0t/docker-mailbox.",
+  "summary": "Wire an OpenClaw agent to a self-hosted docker-mailbox IMAP/SMTP control plane over MCP — read, search, triage, draft, reply and send mail across multiple inboxes with scoped tokens.",
+  "description": "A thin stdio<->HTTP bridge that connects an MCP client (OpenClaw, Claude, Cursor, Codex, ...) to a running docker-mailbox instance's MCP endpoint (/mcp), exposing its tools: mailboxes (discovery), inbox (unified cross-account read), list_folders, list_messages, search, get_message, get_raw_message, get_attachment, get_thread, set_labels, move_messages, create_draft, reply, send, send_draft, delete_message (to Trash) and mark_seen, filtered by the token's scopes. docker-mailbox is a multi-mailbox IMAP/SMTP control plane exposed as a REST API + MCP server on a single port. It is self-hosted — you run the server yourself and point this bridge at it. See https://github.com/psyb0t/docker-mailbox.",
   "extensions": ["./bin/cli.js"],
   "compat": {
     "pluginApi": ">=2026.3.24-beta.2"
@@ -19,7 +19,7 @@
     },
     "MAILBOX_TOKEN": {
       "required": true,
-      "description": "Bearer token matching the server's auth.tokens."
+      "description": "Bearer token configured on the server (its scopes decide which tools appear)."
     }
   },
   "configSchema": {

@@ -86,7 +86,9 @@ def test_unified_search_ignores_smtp_only_mailboxes(imap_connection):
         host="smtp.invalid", username="u", password=SYNTHETIC_PASSWORD, from_address="u@example.org"
     )
     mailboxes = [MailboxConfig(name="smtp", smtp=smtp), MailboxConfig(name="imap", imap=_config())]
-    assert unified_search(mailboxes) == {"messages": [], "errors": []}
+    result = unified_search(mailboxes)
+    assert result["messages"] == [] and result["errors"] == []
+    assert list(result["positions"]) == ["imap"]  # the SMTP-only mailbox is skipped
     imap_connection.login.assert_called_once_with("user", SYNTHETIC_PASSWORD)
 
 

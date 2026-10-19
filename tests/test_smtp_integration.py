@@ -120,6 +120,11 @@ def smtp_sink() -> Any:
         srv.server_close()
 
 
+@pytest.fixture(autouse=True)
+def _state_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("MAILBOXD_STATE_PATH", str(tmp_path / "state.db"))
+
+
 def _client(tmp_path: Path, host: str, port: int) -> TestClient:
     cfg = tmp_path / "config.yaml"
     cfg.write_text(f"""
@@ -185,3 +190,48 @@ def test_send_with_cc_and_bcc_routes_correctly(smtp_sink: Any, tmp_path: Path) -
     # but all 3 must be in the SMTP envelope rcpts
     _, rcpts = sink.envelopes[0]
     assert set(rcpts) == {"a@example.com", "b@example.com", "c@example.com"}
+
+
+def test_send_rejects_unconfigured_identity(smtp_sink: Any, tmp_path: Path) -> None:
+    sink, host, port = smtp_sink
+    c = _client(tmp_path, host, port)
+    r = c.post(
+        "/mailboxes/sink/send",
+        json={
+            "to": ["dest@example.com"],
+            "subject": "spoof",
+            "body_text": "hi",
+            "from_address": "ceo@evil.example",
+        },
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "invalid_identity"
+    assert sink.messages == []
+
+
+def test_send_accepts_legacy_from_address(smtp_sink: Any, tmp_path: Path) -> None:
+    sink, host, port = smtp_sink
+    c = _client(tmp_path, host, port)
+    r = c.post(
+        "/mailboxes/sink/send",
+        json={
+            "to": ["dest@example.com"],
+            "subject": "legacy",
+            "body_text": "hi",
+            "from_address": "sender@example.com",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert len(sink.messages) == 1
+
+
+def test_send_dry_run_does_not_deliver(smtp_sink: Any, tmp_path: Path) -> None:
+    sink, host, port = smtp_sink
+    c = _client(tmp_path, host, port)
+    r = c.post(
+        "/mailboxes/sink/send",
+        json={"to": ["dest@example.com"], "subject": "dry", "body_text": "hi", "dry_run": True},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["dry_run"] is True
+    assert sink.messages == []

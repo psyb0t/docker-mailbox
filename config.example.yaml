@@ -1,56 +1,190 @@
 # mailboxd config — one entry per mailbox you want to control.
 #
 # Each mailbox can declare any combination of:
-#   - imap: for reading / listing / deleting messages
+#   - imap: for reading / listing / organising messages
 #   - smtp: for sending
 # At least one must be set.
 #
-# `name` is the URL-safe handle the HTTP API and MCP tools refer to.
+# `name` is the URL-safe handle the HTTP API and MCP tools refer to
+# (it is passed as the `mailbox` argument; it is NOT a tool prefix).
+#
+# Any string value may reference an environment variable as ${NAME}; a missing
+# variable is a startup error. Use it to keep passwords and tokens out of this file.
 
 log_level: INFO
 
+# ---------------------------------------------------------------------------
+# Authentication and permissions
+# ---------------------------------------------------------------------------
 # Bearer-token auth applies to all non-/health endpoints, including /mcp.
-# Empty / omitted tokens deny access. Generate a token with openssl rand -hex 32.
-# Every configured token can access every mailbox in this instance.
+# Empty / omitted tokens deny access. Generate a token with: openssl rand -hex 32
+#
+# Each token is a mapping with a name (shown in the audit log), the scopes it
+# holds and the mailboxes it may touch:
+#
+#   read      list, search, read, raw source, attachments, threads, stats, drafts list
+#   draft     create / update / delete drafts, prepare a reply as a draft
+#   organize  mark read, labels, move, create folder, move to Trash
+#   send      send, send a draft, reply directly
+#   delete    permanent deletion (only from the Trash folder)
+#   admin     GET /audit, GET /health/deep
 auth:
+  # Only Authentication-Results headers stamped by this authserv-id are trusted
+  # for the SPF/DKIM/DMARC verdicts. Set it to the hostname your own mail server
+  # writes in its Authentication-Results header (look at a received message).
+  # Unset: the topmost header is shown but reported as `trusted: false`.
+  trusted_authserv_id: mx.cgs.example
   tokens:
-    - "replace-with-a-long-random-token"
-    # - "second-token-for-rotation"
+    # An assistant agent that can read, prepare drafts and sort mail, but never
+    # send or delete. Dry-run is off here; it has no send scope anyway.
+    - name: mila
+      token: ${MAILBOXD_TOKEN_MILA}
+      scopes: [read, draft, organize]
+      mailboxes: [contact, support]     # or "*" for every mailbox
+      dry_run: false                    # true: sends by this token are only previewed
 
+    # A human-supervised operator token: may send, but starts in dry-run mode
+    # until you flip the flag.
+    # - name: ops
+    #   token: ${MAILBOXD_TOKEN_OPS}
+    #   scopes: [read, draft, organize, send, delete, admin]
+    #   mailboxes: "*"
+    #   dry_run: true
+
+    # Legacy form: a bare string grants EVERY scope on EVERY mailbox and logs a
+    # warning at startup. Prefer the mapping form above.
+    # - "long-random-legacy-token"
+
+# ---------------------------------------------------------------------------
+# State (audit log, send rate limits, "new since" checkpoints)
+# ---------------------------------------------------------------------------
+# SQLite file, shared by all workers and by `mailboxd watch`. Mount a volume on
+# its directory. Message bodies are never stored. Default: /var/lib/mailboxd/state.db
+# (can also be set with the MAILBOXD_STATE_PATH environment variable).
+state:
+  path: /var/lib/mailboxd/state.db
+
+# ---------------------------------------------------------------------------
+# Send guard
+# ---------------------------------------------------------------------------
+send_guard:
+  dry_run: false      # true: every send is built and previewed but never delivered
+  per_hour: 30        # rolling hour, per mailbox AND per token; 0 disables the limit
+
+# ---------------------------------------------------------------------------
+# Size limits
+# ---------------------------------------------------------------------------
+limits:
+  attachment_max_bytes: 15728640            # largest attachment served (15 MiB)
+  outgoing_attachments_max_bytes: 20971520  # total attachments on one outgoing message (20 MiB)
+  mcp_inline_max_bytes: 524288              # raw source / base64 attachment inline over MCP (512 KiB)
+
+# ---------------------------------------------------------------------------
+# Labels
+# ---------------------------------------------------------------------------
+# Friendly label -> IMAP keyword. `set_labels` and the `label` search filter use
+# the friendly names (plus the built-in "flagged"). Keywords must not contain
+# spaces, quotes, parentheses, `\`, `%`, `*` or start with a backslash.
+labels:
+  suspect: $Suspect
+  a_traiter: $ATraiter
+  fait: $Fait
+
+# ---------------------------------------------------------------------------
+# Watcher (optional): `mailboxd watch --config config.yaml`
+# ---------------------------------------------------------------------------
+# Run it as a separate process (docker compose --profile watch up). For every
+# new message it POSTs a JSON body (sender, subject, authentication verdicts,
+# security signals — never the message body) with an HMAC-SHA256 of the raw body
+# in the `X-Mailboxd-Signature: sha256=<hex>` header.
+watch:
+  folder: INBOX
+  poll_seconds: 60        # fallback polling interval when the server lacks IDLE (min 5)
+  webhooks:
+    - url: https://automation.example.com/hooks/mailboxd
+      secret: ${MAILBOXD_WEBHOOK_SECRET}
+      mailboxes: [contact, support]     # or "*"
+
+# ---------------------------------------------------------------------------
+# Mailboxes
+# ---------------------------------------------------------------------------
 mailboxes:
-  - name: personal
-    description: "My main Gmail account"
+  - name: contact
+    description: "Contact inbox of the association"
 
     imap:
-      host: imap.gmail.com
+      host: imap.example.com
       port: 993
       tls: ssl              # ssl | starttls | none   (default ssl)
-      username: me@gmail.com
-      password: "app-password-here"
+      username: contact@cgs.example
+      password: ${MAILBOX_CONTACT_PASSWORD}
       default_folder: INBOX
 
     smtp:
-      host: smtp.gmail.com
-      port: 465
-      tls: ssl              # ssl | starttls | none   (default starttls)
-      username: me@gmail.com
-      password: "app-password-here"
-      from_address: "Me <me@gmail.com>"
+      host: smtp.example.com
+      port: 587
+      tls: starttls         # ssl | starttls | none   (default starttls)
+      username: contact@cgs.example
+      password: ${MAILBOX_CONTACT_PASSWORD}
+      # Legacy single sender. With no `identities` below it becomes the only identity.
+      from_address: "L'équipe CGS <contact@cgs.example>"
 
-  - name: work
-    description: "Work mailbox over IMAP+SMTP"
+      # Sender identities. A send / reply / draft can only use one of these
+      # (`identity` argument); anything else is refused with 422 invalid_identity.
+      # Exactly one may be `default: true` (otherwise the first one is).
+      identities:
+        - address: contact@cgs.example
+          name: "L'équipe CGS"
+          default: true
+          signature_text: |
+            L'équipe CGS
+            https://cgs.example
+          signature_html: "<b>L'équipe CGS</b><br><a href=\"https://cgs.example\">cgs.example</a>"
+        - address: support@cgs.example
+          name: "Support CGS"
+          signature_text: "Support CGS — réponse sous 48 h"
+
+      save_sent: true       # APPEND a copy to the Sent folder after sending. Set false for
+                            # providers that already file sent mail themselves (Gmail).
+      per_hour: 20          # per-mailbox override of send_guard.per_hour
+
+    # Special folders. null / omitted = auto-detect (IMAP SPECIAL-USE flags, then
+    # usual names such as Sent, Drafts, Trash, Corbeille ...). Set a name to pin one.
+    folders:
+      sent: null
+      drafts: null
+      trash: null
+      junk: null
+
+  - name: support
+    description: "Support inbox (read and draft only through the agent token)"
 
     imap:
-      host: mail.example.com
-      port: 143
-      tls: starttls
-      username: me@example.com
-      password: "secret"
+      host: imap.example.com
+      port: 993
+      tls: ssl
+      username: support@cgs.example
+      password: ${MAILBOX_SUPPORT_PASSWORD}
 
     smtp:
-      host: mail.example.com
+      host: smtp.example.com
       port: 587
       tls: starttls
-      username: me@example.com
-      password: "secret"
-      from_address: me@example.com
+      username: support@cgs.example
+      password: ${MAILBOX_SUPPORT_PASSWORD}
+      from_address: "Support CGS <support@cgs.example>"
+
+  # Gmail-style account: the provider files sent mail itself, so save_sent is off.
+  # - name: personal
+  #   imap:
+  #     host: imap.gmail.com
+  #     username: me@gmail.com
+  #     password: ${MAILBOX_PERSONAL_PASSWORD}   # app password, not your real one
+  #   smtp:
+  #     host: smtp.gmail.com
+  #     port: 465
+  #     tls: ssl
+  #     username: me@gmail.com
+  #     password: ${MAILBOX_PERSONAL_PASSWORD}
+  #     from_address: "Me <me@gmail.com>"
+  #     save_sent: false

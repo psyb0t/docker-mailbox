@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
 
@@ -20,6 +21,11 @@ _HEADERS = {
     "Accept": "application/json, text/event-stream",
     "Content-Type": "application/json",
 }
+
+
+@pytest.fixture(autouse=True)
+def _state_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAILBOXD_STATE_PATH", str(tmp_path / "state.db"))
 
 
 def _client(tmp_path: Path) -> TestClient:
@@ -127,15 +133,15 @@ def test_streamable_http_mcp_initializes_lists_tools_and_calls_mailboxes(
     assert initialized["result"]["serverInfo"]["name"] == "mailboxd"
     tool_names = {tool["name"] for tool in tools["result"]["tools"]}
     assert {"mailboxes", "inbox", "list_folders", "send"} <= tool_names
-    content = mailbox_result["result"]["content"]
-    assert json.loads(content[0]["text"]) == {
-        "mailboxes": [
-            {
-                "name": "alpha",
-                "description": "Primary mailbox",
-                "address": "alpha@example.com",
-                "imap": True,
-                "smtp": True,
-            }
-        ]
-    }
+    result = mailbox_result["result"]
+    assert not result.get("isError")
+    content = json.loads(result["content"][0]["text"])
+    assert result["structuredContent"] == content
+    assert len(content["mailboxes"]) == 1
+    assert content["mailboxes"][0].items() >= {
+        "name": "alpha",
+        "description": "Primary mailbox",
+        "address": "alpha@example.com",
+        "imap": True,
+        "smtp": True,
+    }.items()

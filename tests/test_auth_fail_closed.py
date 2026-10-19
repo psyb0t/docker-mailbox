@@ -10,6 +10,12 @@ from fastapi.testclient import TestClient
 from mailboxd.config import load_config
 from mailboxd.server import create_app
 
+
+@pytest.fixture(autouse=True)
+def _state_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAILBOXD_STATE_PATH", str(tmp_path / "state.db"))
+
+
 TOKEN = "EXAMPLE-DO-NOT-USE-primary"
 SECOND_TOKEN = "EXAMPLE-DO-NOT-USE-secondary"
 EMPTY_AUTH = [
@@ -19,13 +25,13 @@ EMPTY_AUTH = [
 ]
 OPERATIONS = [
     pytest.param("GET", "/mailboxes", None, None, id="metadata"),
-    pytest.param("GET", "/mailboxes/alpha/messages/1", None, "imap_fetch", id="read"),
-    pytest.param("DELETE", "/mailboxes/alpha/messages/1", None, "imap_delete", id="delete"),
+    pytest.param("GET", "/mailboxes/alpha/messages/1", None, "get_message", id="read"),
+    pytest.param("DELETE", "/mailboxes/alpha/messages/1", None, "delete", id="delete"),
     pytest.param(
         "POST",
         "/mailboxes/alpha/send",
         {"to": ["recipient@example.org"], "subject": "test", "body_text": "test"},
-        "smtp_send",
+        "send",
         id="send",
     ),
 ]
@@ -54,7 +60,7 @@ def _mail_boundary(monkeypatch, name):
     if name is None:
         return None
     operation = Mock(return_value={"uid": "1", "subject": "test", "ok": True})
-    monkeypatch.setattr(f"mailboxd.server.{name}", operation)
+    monkeypatch.setattr(f"mailboxd.services.Service.{name}", operation)
     return operation
 
 

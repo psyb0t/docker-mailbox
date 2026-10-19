@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.6.0
+
+mailboxd becomes a connector that can be handed to an AI agent safely: scoped tokens, trash instead of erase, two-step drafts, send guards, and message analysis for phishing triage.
+
+### New
+
+1. **Raw source and headers.** `GET .../messages/{uid}/raw` (and the `get_raw_message` tool, truncated to `limits.mcp_inline_max_bytes`); `get_message` gains `headers=true` (every header in wire order) and returns `reply_to`, `in_reply_to`, `references`.
+2. **Replies in the thread.** `POST .../messages/{uid}/reply` and the `reply` tool. Recipients, `Re:` subject, `In-Reply-To` and `References` are derived by the server from the original; `reply_all` removes the mailbox's own addresses; the original gets `\Answered`.
+3. **Copy in Sent.** After a successful send the message (Bcc kept) is appended to the Sent folder (`smtp.save_sent`, default true). A failure is reported as `warnings: ["sent_copy_failed"]` and never fails the send.
+4. **Two-step drafts.** `drafts` routes and `create_draft` / `list_drafts` / `update_draft` / `delete_draft` / `send_draft` tools. Drafts are stored with `\Draft` and an `X-Mailboxd-Draft-By` header; sending one strips internal headers, re-validates the identity and removes the draft.
+5. **Scoped tokens.** `auth.tokens` entries are now `{name, token, scopes, mailboxes, dry_run}` with scopes `read`, `draft`, `organize`, `send`, `delete`, `admin`. `tools/list` only shows the tools a token may call; a mailbox outside a token's list is reported as not found. Bare string tokens still work (all scopes, all mailboxes) and log a warning.
+6. **Trash and audit log.** Deleting moves to the Trash folder (`UID MOVE`, else `COPY` + `\Deleted` + `UID EXPUNGE` with `UIDPLUS`; without `UIDPLUS` the message is only flagged). `permanent=true` needs the `delete` scope and a Trash `folder`. Every write, and every refused write, is recorded in SQLite; `GET /audit` and the `audit_log` tool (admin) read it. Bodies are never stored.
+7. **Send guards.** Rolling hourly rate limit per mailbox and per token (`send_guard.per_hour`, `smtp.per_hour`, `429` with `Retry-After`), dry-run (global, per token or per request) returning a preview, and a sender identity that must be configured (`422 invalid_identity`).
+8. **Pagination and filters.** Opaque `cursor` / `next_cursor` paging, `has_attachments`, `recipient` (To, Cc, Delivered-To, X-Original-To), ISO dates, `total`.
+9. **New mail only.** `since_cursor` / `next_since_cursor` and server-side named `checkpoint`s (per token, mailbox and folder). The oldest new messages come first so a checkpoint never skips mail; a UIDVALIDITY change returns `reset: true`.
+10. **Conversations.** `GET .../thread` and `GET .../threads` (server `THREAD` when offered, local grouping by References / In-Reply-To otherwise).
+11. **Labels, move, batches.** `POST .../messages/labels`, `.../messages/move`, `POST .../folders`, batch `seen` and `delete`; friendly labels map to IMAP keywords through `labels:` in the config; `label` search filter.
+12. **Attachments.** Download (`GET .../attachments/{part_id}`, sanitized filename, `nosniff`, size cap, sha256 in the listing; `get_attachment` over MCP) and upload (`attachments` with `data_base64` or `from_message`) on send, reply and draft with a total size cap.
+13. **Identities.** `smtp.identities` (address, display name, default), `GET .../identities`, `identity` argument everywhere.
+14. **Signatures.** Per-identity text and HTML signatures, switchable with `signature: false`, never applied twice.
+15. **Notifications.** `mailboxd watch` (IMAP IDLE with polling fallback) posts HMAC-SHA256 signed webhooks for new mail: headers and verdicts, never bodies. Optional `watch` service in `docker-compose.yml`.
+16. **Search.** `text` / `body` full-text search with UTF-8 criteria exposed on every search route and tool.
+17. **Safer HTML.** `body_html_safe` (nh3 allow-list, remote images removed) and `html_analysis` (`hidden_text`, `suspicious_links`).
+18. **Stats and deep health.** `GET .../stats` (per-folder counts, quota) and `GET /health/deep` (admin).
+19. **MCP polish.** Every tool has a title and `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` annotations; results carry `structuredContent`; errors are `isError` results with `{error: {code, message, details?}}`; blocking work runs off the event loop.
+
+Also new: authentication verdicts (`authentication`: SPF, DKIM, DMARC, ARC) taken only from `Authentication-Results` headers stamped by `auth.trusted_authserv_id`, plus security signals (reply-to / return-path mismatch, display-name spoof, DKIM alignment); `${ENV}` interpolation in the config; `state.path` / `MAILBOXD_STATE_PATH`; `nh3` dependency; a state volume in the image and Compose file (published on `127.0.0.1` by default).
+
+### Breaking changes
+
+- **Tokens are scoped.** New-style tokens only hold the scopes you list. Legacy bare-string tokens keep every scope and every mailbox, but log a warning.
+- **Delete moves to Trash.** `DELETE` / `delete_message` no longer erases. Permanent deletion needs the `delete` scope and must target the Trash folder. The folder-wide `EXPUNGE` that used to run on delete was removed and never runs again.
+- **Reading no longer marks mail as read.** Messages are fetched with `BODY.PEEK[]` instead of `RFC822`.
+- **`from_address` is validated.** It must match a configured identity (prefer the new `identity` field); other values return `422`.
+- **No more Thunderbird `User-Agent`** header on outgoing mail.
+- **MCP errors** are `isError` tool results with a structured `{error: {code, message}}` body instead of free text; HTTP errors gain the same `error` object next to the legacy `detail`.
+- **State needs a writable path** (`/var/lib/mailboxd` in the image). Mount a volume or rate limits and the audit log are lost on restart.
+- `GET /mailboxes` entries gain `address` and `identities`; stale documentation was removed (the "name is the MCP tool prefix" claim, POP3, and the `LOG_LEVEL` environment variable, which was never read: use `log_level` in the config).
+
 ## v0.5.1
 
 - Clarify Docker's internal listener, the standalone CLI default, and host-side publishing. Documentation examples publish on host loopback and explain how to adjust the checked-in Compose file.

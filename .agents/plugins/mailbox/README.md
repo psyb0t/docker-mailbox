@@ -20,7 +20,7 @@ The docker-mailbox MCP tools become available to your agent: `mailboxes`
 (discovery), `inbox` (unified newest-first read across every configured IMAP
 mailbox), `list_folders`, `list_messages`, `search` (structured single-mailbox
 search), `get_message` (with optional `reader` mode — HTML stripped to clean
-markdown), `delete_message`, `mark_seen`, and `send`. Every per-mailbox tool
+markdown), `get_raw_message`, `get_attachment`, `get_thread`, `set_labels`, `move_messages`, `create_draft`, `reply`, `send`, `send_draft`, `delete_message` (moves to Trash), `mark_seen`, and more. The server only lists the tools the token's scopes allow. Every per-mailbox tool
 takes a `mailbox` argument (the configured name or its email address), so the
 tool catalog stays constant-sized no matter how many mailboxes are configured.
 

@@ -128,3 +128,11 @@ def imap_connection(monkeypatch):
     monkeypatch.setattr("mailboxd.imap_client.imaplib.IMAP4_SSL", factory)
     monkeypatch.setattr("mailboxd.imap_client.imaplib.IMAP4", factory)
     return connection
+
+
+@pytest.fixture(autouse=True)
+def _isolated_state_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Every test gets its own SQLite state file (audit, rate limits, cursors)."""
+    path = tmp_path / "mailboxd-state.db"
+    monkeypatch.setenv("MAILBOXD_STATE_PATH", str(path))
+    return path
