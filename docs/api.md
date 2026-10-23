@@ -14,7 +14,7 @@ Errors carry an `error` object with `code`, `message` and optional `details`, pl
 | `403`  | `permission_denied`  | The token lacks the scope (`details.required_scope`).                                       |
 | `404`  | `not_found`          | Unknown mailbox, message or part, or a mailbox outside the token's allowlist. |
 | `409`  | `conflict`           | The mailbox lacks the protocol, or the action does not apply (e.g. permanent delete outside Trash). |
-| `413`  | `too_large`          | Request body or attachment exceeds its configured size limit. |
+| `413`  | `too_large`          | Request body, attachment or message read from IMAP exceeds its configured size limit. |
 | `422`  | `validation_error` / `invalid_identity` | Bad request body, or a sender address that is not a configured identity.          |
 | `429`  | `rate_limited`       | Hourly send limit reached. `Retry-After` header and `details.retry_after`.                  |
 | `502`  | `imap_error` / `smtp_error` | The upstream server said no.                                                         |

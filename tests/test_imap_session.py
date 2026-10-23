@@ -159,7 +159,7 @@ def test_fetch_raw_uses_peek_and_does_not_set_seen(start: Start) -> None:
         hdr = s.fetch_raw("1", header_only=True)
         assert b"Subject: Hello" in hdr and b"hello from the mock" not in hdr
         assert s.fetch_message("1")["Subject"] == "Hello"
-    fetches = [c for c in sink.commands if "UID FETCH" in c]
+    fetches = [c for c in sink.commands if "UID FETCH" in c and "(RFC822.SIZE)" not in c]
     assert fetches and all("BODY.PEEK[" in c for c in fetches)
     assert not any("RFC822" in c for c in fetches)
     assert sink.flags(1) == set()

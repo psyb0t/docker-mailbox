@@ -164,7 +164,7 @@ def test_production_state_survives_restart() -> None:
         started = True
         assert docker("port", name, "8000/tcp").startswith("127.0.0.1:")
         wait_ready(name)
-        assert request(name, "/health")["body"]["version"] == "0.6.2"
+        assert request(name, "/health")["body"]["version"] == "0.7.0"
         assert request(name, "/mailboxes")["status"] == 401
         response = request(
             name,

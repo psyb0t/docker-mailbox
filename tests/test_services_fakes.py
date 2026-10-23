@@ -209,7 +209,7 @@ class FakeSession:
 
 def install_fake_imap(monkeypatch: pytest.MonkeyPatch, srv: FakeServer) -> None:
     @contextmanager
-    def fake_session(cfg: Any) -> Iterator[FakeSession]:
+    def fake_session(cfg: Any, message_max_bytes: int = 0) -> Iterator[FakeSession]:
         yield FakeSession(srv, cfg)
 
     monkeypatch.setattr(imap_client, "session", fake_session)

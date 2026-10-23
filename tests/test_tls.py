@@ -116,7 +116,7 @@ def test_starttls_requires_certificate_and_hostname_validation(
 ) -> None:
     connection = Mock()
     if protocol == "imap":
-        monkeypatch.setattr(imap_client.imaplib, "IMAP4", Mock(return_value=connection))
+        monkeypatch.setattr(imap_client, "_CappedIMAP4", Mock(return_value=connection))
         cfg = ImapConfig(host="mail.invalid", tls="starttls", username="u", password="REPLACE_ME")
         with imap_client._connect(cfg):
             pass

@@ -28,6 +28,7 @@ import html2text
 
 from . import mime
 from .config import FoldersConfig, ImapConfig, MailboxConfig
+from .errors import TooLarge
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +73,14 @@ _UID_RE = re.compile(r"^[0-9][0-9,:*]*$")
 _KEYWORD_RE = re.compile(r"^\\?[A-Za-z0-9$_.\-]+$")
 
 _HEADER_FIELDS = "FROM TO CC SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES"
+
+# Header fetches are capped with a partial range and truncated rather than
+# refused, so one message with absurd headers cannot break a listing or stall
+# the watcher. Real header blocks are a few KiB.
+_HEADER_FIELDS_MAX_BYTES = 64 * 1024
+_HEADER_MAX_BYTES = 256 * 1024
+
+DEFAULT_MESSAGE_MAX_BYTES = 32 * 1024 * 1024
 
 # Fallback names when the server does not advertise SPECIAL-USE.
 _SPECIAL_NAMES: dict[str, list[str]] = {
@@ -130,17 +139,44 @@ def imap_date(value: str) -> str:
     return f"{d.day}-{months[d.month - 1]}-{d.year}"
 
 
+class _CappedIMAP4(imaplib.IMAP4):
+    """Refuses any server literal over `max_literal` before allocating it.
+
+    imaplib reads a `{N}` literal with one `read(N)`, sized by the server. A
+    server that ignores a partial-fetch range could otherwise make the client
+    allocate whatever it announces, whatever limit the request asked for.
+    """
+
+    max_literal = DEFAULT_MESSAGE_MAX_BYTES + 1
+
+    def read(self, size: int) -> bytes:
+        if size > self.max_literal:
+            # The literal is still in flight, so the connection cannot be reused.
+            self.shutdown()
+            raise TooLarge("IMAP server sent more data than requested", limit=self.max_literal)
+        return super().read(size)
+
+
+class _CappedIMAP4_SSL(_CappedIMAP4, imaplib.IMAP4_SSL):
+    pass
+
+
 @contextmanager
-def _connect(cfg: ImapConfig) -> Iterator[imaplib.IMAP4]:
+def _connect(
+    cfg: ImapConfig, message_max_bytes: int = DEFAULT_MESSAGE_MAX_BYTES
+) -> Iterator[imaplib.IMAP4]:
+    conn: _CappedIMAP4
     if cfg.tls == "ssl":
-        conn: imaplib.IMAP4 = imaplib.IMAP4_SSL(
+        conn = _CappedIMAP4_SSL(
             cfg.host,
             cfg.port,
             ssl_context=ssl.create_default_context(),
             timeout=_SOCKET_TIMEOUT_SECONDS,
         )
     else:
-        conn = imaplib.IMAP4(cfg.host, cfg.port, timeout=_SOCKET_TIMEOUT_SECONDS)
+        conn = _CappedIMAP4(cfg.host, cfg.port, timeout=_SOCKET_TIMEOUT_SECONDS)
+    # Header fetches may legitimately exceed a very small message limit.
+    conn.max_literal = max(message_max_bytes + 1, _HEADER_MAX_BYTES)
     try:
         if cfg.tls == "starttls":
             conn.starttls(ssl_context=ssl.create_default_context())
@@ -193,9 +229,15 @@ def _parse_list_line(raw: Any) -> dict[str, Any] | None:
 class Session:
     """One authenticated IMAP connection."""
 
-    def __init__(self, conn: imaplib.IMAP4, cfg: ImapConfig) -> None:
+    def __init__(
+        self,
+        conn: imaplib.IMAP4,
+        cfg: ImapConfig,
+        message_max_bytes: int = DEFAULT_MESSAGE_MAX_BYTES,
+    ) -> None:
         self.conn = conn
         self.cfg = cfg
+        self.message_max_bytes = message_max_bytes
         self._caps: set[str] | None = None
         self._folders: list[dict[str, Any]] | None = None
         self.selected: str | None = None
@@ -301,7 +343,8 @@ class Session:
         typ, fdata = self.conn.uid(
             "FETCH",
             uid_set(uids),
-            f"(BODY.PEEK[HEADER.FIELDS ({_HEADER_FIELDS})] FLAGS RFC822.SIZE)",
+            f"(BODY.PEEK[HEADER.FIELDS ({_HEADER_FIELDS})]<0.{_HEADER_FIELDS_MAX_BYTES}>"
+            " FLAGS RFC822.SIZE)",
         )
         if typ != "OK":
             raise ImapError("FETCH headers failed")
@@ -330,15 +373,43 @@ class Session:
             buf = ""
         return out
 
+    def message_size(self, uid: str) -> int:
+        _validate_uid(uid)
+        typ, data = self.conn.uid("FETCH", uid, "(RFC822.SIZE)")
+        if typ == "OK":
+            for item in data or []:
+                meta = item[0] if isinstance(item, tuple) else item
+                if not isinstance(meta, bytes):
+                    continue
+                text = meta.decode("ascii", "replace")
+                size = _extract(text, "RFC822.SIZE")
+                if _extract(text, "UID") == uid and size.isdigit():
+                    return int(size)
+        raise ImapError(f"message UID {uid} not found in {self.selected!r}")
+
     def fetch_raw(self, uid: str, header_only: bool = False) -> bytes:
         _validate_uid(uid)
-        section = "BODY.PEEK[HEADER]" if header_only else "BODY.PEEK[]"
+        if header_only:
+            section = f"BODY.PEEK[HEADER]<0.{_HEADER_MAX_BYTES}>"
+        else:
+            limit = self.message_max_bytes
+            size = self.message_size(uid)
+            if size > limit:
+                raise TooLarge("message exceeds the incoming size limit", limit=limit, size=size)
+            # The extra byte catches a server that under-reported RFC822.SIZE;
+            # the range keeps memory bounded either way.
+            section = f"BODY.PEEK[]<0.{limit + 1}>"
         typ, data = self.conn.uid("FETCH", uid, f"({section})")
         if typ != "OK" or not data:
             raise ImapError(f"could not fetch UID {uid}")
         for item in data:
             if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], bytes):
-                return item[1]
+                raw = item[1]
+                if not header_only and len(raw) > self.message_max_bytes:
+                    raise TooLarge(
+                        "message exceeds the incoming size limit", limit=self.message_max_bytes
+                    )
+                return raw
         raise ImapError(f"message UID {uid} not found in {self.selected!r}")
 
     def fetch_message(self, uid: str, header_only: bool = False) -> Message:
@@ -448,9 +519,11 @@ class Session:
 
 
 @contextmanager
-def session(cfg: ImapConfig) -> Iterator[Session]:
-    with _connect(cfg) as conn:
-        yield Session(conn, cfg)
+def session(
+    cfg: ImapConfig, message_max_bytes: int = DEFAULT_MESSAGE_MAX_BYTES
+) -> Iterator[Session]:
+    with _connect(cfg, message_max_bytes) as conn:
+        yield Session(conn, cfg, message_max_bytes)
 
 
 def special_folder(cfg: ImapConfig, folders: FoldersConfig, kind: str) -> str:

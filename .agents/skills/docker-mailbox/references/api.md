@@ -20,6 +20,7 @@ Status codes:
 | `403`  | The token lacks the scope for this operation.                                               |
 | `404`  | Unknown mailbox name in the URL, or one this token may not see.                             |
 | `409`  | Mailbox doesn't have the requested protocol (IMAP endpoint on an SMTP-only mailbox).        |
+| `413`  | Request body, attachment or message read from IMAP is over its configured size limit.       |
 | `422`  | Request body validation failed, or the sender is not a configured identity.                 |
 | `429`  | Hourly send limit reached (`Retry-After`).                                                  |
 | `502`  | The IMAP / SMTP server upstream rejected the operation.                                     |
@@ -32,7 +33,7 @@ Message identifiers are UIDs, scoped to a mailbox, IMAP folder and UIDVALIDITY g
 
 ```bash
 curl -s $MAILBOX_URL/health
-# {"ok": true, "version": "0.6.2"}
+# {"ok": true, "version": "0.7.0"}
 ```
 
 ### Mailboxes

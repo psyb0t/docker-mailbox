@@ -130,7 +130,7 @@ class Service:
         return mb.smtp
 
     def _session(self, mb: MailboxConfig) -> Any:
-        return imap_client.session(self._imap(mb))
+        return imap_client.session(self._imap(mb), self.cfg.limits.incoming_message_max_bytes)
 
     def _log(
         self,

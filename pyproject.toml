@@ -1,6 +1,6 @@
 [project]
 name = "mailboxd"
-version = "0.6.2"
+version = "0.7.0"
 description = "Multi-mailbox IMAP/SMTP control plane with scoped HTTP and MCP access."
 readme = "README.md"
 license = { text = "WTFPL" }

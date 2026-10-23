@@ -75,6 +75,7 @@ send_guard:
 # Size limits
 # ---------------------------------------------------------------------------
 limits:
+  incoming_message_max_bytes: 33554432      # largest message read from IMAP (32 MiB)
   request_max_bytes: 33554432               # maximum HTTP/MCP request body (32 MiB)
   attachment_max_bytes: 15728640            # largest attachment served (15 MiB)
   outgoing_attachments_max_bytes: 20971520  # total attachments on one outgoing message (20 MiB)

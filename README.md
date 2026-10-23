@@ -82,7 +82,7 @@ The optional webhook watcher is a second service in the same file, off by defaul
 | Access | Per-token scopes and mailbox allowlists shared by REST and MCP |
 | Operations | SQLite audit records, shared send limits, checkpoints and durable signed webhooks |
 
-Mail bodies and drafts stay on IMAP. Mount `/var/lib/mailboxd` for persistent operational state. HTTP workers and the optional watcher share one SQLite database on a local filesystem. Read the [migration notes](docs/operations.md#migration) before replacing a stateless deployment.
+Mount `/var/lib/mailboxd` for persistent operational state. HTTP workers and the optional watcher share one SQLite database on a local filesystem. Read the [migration notes](docs/operations.md#migration) before replacing a stateless deployment.
 
 ## Development
 

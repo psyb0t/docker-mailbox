@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7.0
+
+- New `limits.incoming_message_max_bytes` setting, default 32 MiB. Reading a larger message, downloading its source or attachments, replying to it, attaching its parts with `from_message`, or updating or sending it as a draft returns `413 too_large`. The service checks `RFC822.SIZE` first and requests at most the limit, so the body of a larger message is never downloaded. Reported by Brandon Shelley (@brandonscript) in PR #9.
+- IMAP connections refuse any server response larger than the limit before storing it. A server that ignores the requested range can no longer exhaust memory.
+- Listings, threads and webhook notifications fetch capped headers, so messages over the limit still appear there.
+
+### Breaking changes
+
+- Messages over 32 MiB can no longer be read with the default configuration. Raise `limits.incoming_message_max_bytes` to read them.
+
 ## v0.6.2
 
 - Header listings keep the UID, size and flags when the IMAP server sends them after the header literal, as Proton Bridge does. These messages previously came back with an empty UID. Reported and fixed by @dvanwinkle in issue #8.

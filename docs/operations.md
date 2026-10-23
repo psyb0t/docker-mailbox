@@ -14,7 +14,7 @@ Audit access requires `admin` and respects mailbox allowlists. Audit metadata re
 
 Configure targets under `watch.webhooks`, then run `docker compose --profile watch up -d`. The watcher uses IMAP IDLE when available and polls otherwise. The HTTP service and watcher share SQLite; they do not need separate databases.
 
-The watcher records a heartbeat while its discovery and delivery threads are alive. `mailboxd watch-health` exits successfully when a heartbeat is no older than 90 seconds. Compose uses this command for its watcher healthcheck. API and MCP request bodies are limited to `limits.request_max_bytes`, default 32 MiB.
+The watcher records a heartbeat while its discovery and delivery threads are alive. `mailboxd watch-health` exits successfully when a heartbeat is no older than 90 seconds. Compose uses this command for its watcher healthcheck. API and MCP request bodies are limited to `limits.request_max_bytes`, default 32 MiB. Messages read from IMAP are limited to `limits.incoming_message_max_bytes`, also 32 MiB by default.
 
 Discovery atomically commits the checkpoint and per-recipient notification records. A worker claims a delivery with a lease, sends once, then records success or schedules retry. A crash can leave the receiver with a successful request and an unrecorded outcome. Delivery is therefore at least once. Receivers must deduplicate by `event_id`. A lease expires after 60 seconds; one outbound attempt times out after 10 seconds.
 

@@ -75,12 +75,15 @@ A token entry is either a mapping `{name, token, scopes, mailboxes, dry_run}` or
 ```yaml
 send_guard: { dry_run: false, per_hour: 30 }   # rolling hour, per mailbox AND per token; 0 = unlimited
 limits:
+  incoming_message_max_bytes: 33554432        # largest message read from IMAP
   request_max_bytes: 33554432                 # maximum HTTP/MCP request body
   attachment_max_bytes: 15728640               # largest attachment served
   outgoing_attachments_max_bytes: 20971520     # total attachments on one outgoing message
   mcp_inline_max_bytes: 524288                 # raw source / base64 attachment returned inline over MCP
 labels: { suspect: $Suspect, a_traiter: $ATraiter, fait: $Fait }   # friendly name -> IMAP keyword
 ```
+
+`limits.incoming_message_max_bytes` caps the raw size of a message read from IMAP (default 32 MiB, minimum 1024). An operation that needs the whole message returns `413 too_large` over HTTP and MCP when the message is larger: reading it, downloading its source or an attachment, replying to it, attaching its parts with `from_message`, and updating or sending it as a draft. The service checks the server's `RFC822.SIZE` before downloading anything and requests at most the limit. If a server ignores that range and sends more, the connection is closed before the data is stored and the same error is returned. Listings, threads and webhook notifications read capped headers only, so oversized messages still appear there.
 
 `smtp.per_hour` overrides `send_guard.per_hour` for one mailbox. Labels are plain IMAP keywords: the friendly names are what you pass to `set_labels` and the `label` search filter (plus the built-in `flagged`).
 
