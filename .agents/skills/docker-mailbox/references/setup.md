@@ -98,6 +98,10 @@ mailboxes:
 
 Check the provider's current IMAP/SMTP settings and authentication policy. Mailboxd supports username/password login, including app passwords. It does not implement OAuth login. SSL and STARTTLS verify certificates and hostnames; mount a trusted CA bundle for private servers. See the [migration guide](https://github.com/psyb0t/docker-mailbox/blob/main/docs/operations.md#migration).
 
+## Catch-all senders
+
+To authorize aliases in one domain, add an identity with `address: "*@example.com"` alongside a concrete default identity. Set its `name`, `signature_text` and `signature_html` as needed. Requests must supply a concrete address, never `*`. Exact identities win; patterns match only their exact domain, not subdomains. Patterns cannot be defaults. Replies automatically match To/Cc addresses before using the concrete default. The SMTP provider must also allow the selected sender.
+
 ## Ports
 
 | Port | Service                                                                                  |

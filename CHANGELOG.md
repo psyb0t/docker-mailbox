@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.0
+
+- Support opt-in `*@domain` sender identities for sends, replies and drafts, with inherited names and signatures. Exact identities take priority; automatic replies select the first matching To/Cc alias before falling back to the concrete default.
+- Exclude configured catch-all aliases from reply-all recipients. Reject malformed patterns, wildcard defaults and literal wildcard senders.
+
+### Breaking changes
+
+- Wildcard identities are now templates, not literal senders. Keep at least one concrete identity as the default and pass a concrete address when selecting a sender. Wildcard-only configurations and wildcard defaults are rejected at startup.
+
 ## v0.7.0
 
 - New `limits.incoming_message_max_bytes` setting, default 32 MiB. Reading a larger message, downloading its source or attachments, replying to it, attaching its parts with `from_message`, or updating or sending it as a draft returns `413 too_large`. The service checks `RFC822.SIZE` first and requests at most the limit, so the body of a larger message is never downloaded. Reported by Brandon Shelley (@brandonscript) in PR #9.

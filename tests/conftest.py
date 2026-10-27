@@ -4,8 +4,10 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from email.message import EmailMessage
 from pathlib import Path
+from threading import Thread
 from typing import Any
 from unittest.mock import Mock
 
@@ -136,3 +138,96 @@ def _isolated_state_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pat
     path = tmp_path / "mailboxd-state.db"
     monkeypatch.setenv("MAILBOXD_STATE_PATH", str(path))
     return path
+
+
+@pytest.fixture
+def catch_all_mailbox_factory():
+    """Run HTTP with local wire-level IMAP/SMTP peers for sender identity tests."""
+    import imap_mock
+    from fastapi.testclient import TestClient
+    from test_smtp_integration import _make_handler, _Server, _Sink
+
+    from mailboxd.config import Config
+    from mailboxd.server import create_app
+
+    @contextmanager
+    def start(wildcard: bool = False, to: str | None = None, cc: str | None = None):
+        original = EmailMessage()
+        original["From"] = "Author <author@example.org>"
+        original["Message-ID"] = "<original@example.org>"
+        original["Subject"] = "Catch-all question"
+        if to is not None:
+            original["To"] = to
+        if cc is not None:
+            original["Cc"] = cc
+        original.set_content("Original message")
+        identities = [
+            {
+                "address": "primary@example.com",
+                "name": "Primary",
+                "default": True,
+                "signature_text": "Primary signature",
+            },
+            {
+                "address": "known@example.com",
+                "name": "Known",
+                "signature_text": "Known signature",
+            },
+        ]
+        if wildcard:
+            identities.append(
+                {
+                    "address": "*@example.com",
+                    "name": "Catch-all",
+                    "signature_text": "Wildcard signature",
+                }
+            )
+        with ExitStack() as cleanup:
+            imap_sink, imap_server, imap_host, imap_port = imap_mock.start(
+                {1: original.as_bytes()}, caps=imap_mock.MODERN_CAPS, folders={"Drafts": {}}
+            )
+            cleanup.callback(imap_server.server_close)
+            cleanup.callback(imap_server.shutdown)
+            smtp_sink = _Sink()
+            smtp_server = _Server(("127.0.0.1", 0), _make_handler(smtp_sink))
+            cleanup.callback(smtp_server.server_close)
+            cleanup.callback(smtp_server.shutdown)
+            thread = Thread(target=smtp_server.serve_forever, daemon=True)
+            thread.start()
+            smtp_host, smtp_port = smtp_server.server_address[:2]
+            config = Config.model_validate(
+                {
+                    "auth": {"tokens": ["EXAMPLE-DO-NOT-USE"]},
+                    "mailboxes": [
+                        {
+                            "name": "catchall",
+                            "imap": {
+                                "host": imap_host,
+                                "port": imap_port,
+                                "tls": "none",
+                                "username": "primary@example.com",
+                                "password": "EXAMPLE-DO-NOT-USE",
+                            },
+                            "smtp": {
+                                "host": smtp_host,
+                                "port": smtp_port,
+                                "tls": "none",
+                                "username": "",
+                                "password": "",
+                                "from_address": "primary@example.com",
+                                "identities": identities,
+                                "save_sent": False,
+                            },
+                        }
+                    ],
+                }
+            )
+            client = cleanup.enter_context(
+                TestClient(
+                    create_app(config),
+                    headers={"Authorization": "Bearer EXAMPLE-DO-NOT-USE"},
+                )
+            )
+            yield client, smtp_sink, imap_sink
+
+    return start

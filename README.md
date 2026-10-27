@@ -12,7 +12,7 @@ For agent access, configure tokens with explicit permissions:
 - **Scoped tokens.** A token that holds `read`, `draft` and `organize` cannot send or delete, and does not even see those tools.
 - **Deletion defaults to Trash.** Deleting moves a message to Trash. Permanent erasure needs the `delete` scope and only works from the Trash folder. The service never issues a folder-wide `EXPUNGE`.
 - **Drafts in two steps.** An agent can prepare a reply; a human (or a token with `send`) sends it.
-- **Send guard.** Hourly rate limit, dry-run mode, and a sender address that must be one of the identities you configured.
+- **Send guard.** Hourly rate limit, dry-run mode, and a sender address authorized by your configured exact identities or opt-in domain patterns.
 - **Message analysis.** Inspect SPF/DKIM/DMARC verdicts, header mismatches, hidden text and deceptive links. Verdicts are trusted only when the receiving server matches your configuration. Request sanitized HTML when needed.
 - **Audit log.** Every write, and every refused write, is recorded (never message bodies).
 

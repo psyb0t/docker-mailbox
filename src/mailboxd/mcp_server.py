@@ -146,8 +146,9 @@ _COMPOSE_PROPS: dict[str, Any] = {
     "identity": {
         "type": "string",
         "description": (
-            "Sender identity address (see `identities`). Must be configured for the "
-            "mailbox; defaults to the mailbox's default identity."
+            "Concrete sender address (see `identities`). Must match a configured exact "
+            "identity or *@domain pattern; never pass the pattern itself. "
+            "Defaults to the mailbox's concrete default identity."
         ),
     },
     "reply_to": {"type": "string"},
@@ -689,8 +690,9 @@ def build_catalog(cfg: Config) -> list[ToolSpec]:
         ToolSpec(
             "identities",
             "List sender identities",
-            "List the sender identities (From addresses) usable on a mailbox. Use the `address` "
-            "as `identity` in `send`, `reply` and `create_draft`.",
+            "List exact sender identities and *@domain patterns usable on a mailbox. "
+            "Pass a concrete address as `identity` in `send`, `reply` and `create_draft`, "
+            "never a wildcard pattern.",
             _props(),
             ("mailbox",),
             _READ,
@@ -702,8 +704,8 @@ def build_catalog(cfg: Config) -> list[ToolSpec]:
             "Send an email",
             "Send an email IMMEDIATELY and irreversibly to real recipients. When unsure, use "
             "`create_draft` instead so a human can review and send it. Set `dry_run=true` to "
-            "validate and preview without delivering. Rate limited; the sender must be one of "
-            "the mailbox identities. A copy is saved to Sent when configured.",
+            "validate and preview without delivering. Rate limited; the concrete sender must "
+            "match an exact identity or *@domain pattern. A copy is saved to Sent when configured.",
             _props(**_COMPOSE_PROPS, dry_run=_DRY_RUN_ARG),
             ("mailbox", "to", "subject"),
             _SEND,
@@ -719,7 +721,8 @@ def build_catalog(cfg: Config) -> list[ToolSpec]:
             "original (`reply_all` adds the other participants); you cannot choose them. With "
             "`draft=true` the reply is saved as a draft for a human to review and send; "
             "otherwise it is sent immediately (requires the send scope). `dry_run=true` "
-            "previews without delivering.",
+            "previews without delivering. Without `identity`, selects an exact To/Cc identity, "
+            "then the first matching *@domain alias, then the default.",
             _props(
                 uid=_UID_ARG,
                 folder=_FOLDER_ARG,

@@ -945,13 +945,22 @@ class Service:
     def _reply_identity(smtp: SmtpConfig, orig: Message, wanted: str | None) -> Any:
         if wanted:
             return compose.resolve_identity(smtp, wanted)
-        addrs = {
-            a.lower()
-            for _, a in getaddresses([mime.decode(orig.get("To")), mime.decode(orig.get("Cc"))])
-        }
+        addrs = [
+            a
+            for _, a in getaddresses(
+                [
+                    mime.decode(value)
+                    for header in ("To", "Cc")
+                    for value in orig.get_all(header, [])
+                ]
+            )
+        ]
         for i in smtp.all_identities():
-            if i.address.lower() in addrs:
+            if not i.is_pattern and any(i.matches(a) for a in addrs):
                 return i
+        for address in addrs:
+            if any(i.is_pattern and i.matches(address) for i in smtp.all_identities()):
+                return compose.resolve_identity(smtp, address)
         return smtp.default_identity()
 
     @staticmethod

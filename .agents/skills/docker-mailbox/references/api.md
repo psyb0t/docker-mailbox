@@ -21,7 +21,7 @@ Status codes:
 | `404`  | Unknown mailbox name in the URL, or one this token may not see.                             |
 | `409`  | Mailbox doesn't have the requested protocol (IMAP endpoint on an SMTP-only mailbox).        |
 | `413`  | Request body, attachment or message read from IMAP is over its configured size limit.       |
-| `422`  | Request body validation failed, or the sender is not a configured identity.                 |
+| `422`  | Request body validation failed, or configured identities do not authorize the sender. |
 | `429`  | Hourly send limit reached (`Retry-After`).                                                  |
 | `502`  | The IMAP / SMTP server upstream rejected the operation.                                     |
 
@@ -33,7 +33,7 @@ Message identifiers are UIDs, scoped to a mailbox, IMAP folder and UIDVALIDITY g
 
 ```bash
 curl -s $MAILBOX_URL/health
-# {"ok": true, "version": "0.7.0"}
+# {"ok": true, "version": "0.8.0"}
 ```
 
 ### Mailboxes
@@ -202,7 +202,7 @@ curl -s -X POST -H "Authorization: Bearer $MAILBOX_TOKEN" -H 'Content-Type: appl
   "$MAILBOX_URL/mailboxes/contact/send"
 ```
 
-Required: `to` (non-empty), `subject`, and at least one of `body_text` / `body_html` (both = `multipart/alternative`). `identity` must be one of the mailbox's configured identities (see `GET .../identities`); `from_address` is a legacy alias that must match one. Attachments: `attachments: [{filename, content_type, data_base64} | {from_message: {uid, part_id}}]`. Drafts: `POST/GET .../drafts`, `PUT/DELETE .../drafts/<uid>` (a PUT changes the UID).
+Required: `to` (non-empty), `subject`, and at least one of `body_text` / `body_html` (both = `multipart/alternative`). `identity` must be a concrete address matching an exact identity or opt-in `*@domain` pattern (see `GET .../identities`); `from_address` is a legacy alias with the same rules. Never pass the wildcard string as a sender. Automatic replies prefer exact To/Cc identities, then the first matching To/Cc alias, then the concrete default. Pattern matches inherit names and signatures. Attachments: `attachments: [{filename, content_type, data_base64} | {from_message: {uid, part_id}}]`. Drafts: `POST/GET .../drafts`, `PUT/DELETE .../drafts/<uid>` (a PUT changes the UID).
 
 The server sets `Date` and a domain-aligned `Message-ID`, files a copy in Sent and flags the original `\Answered` on a reply. Response:
 

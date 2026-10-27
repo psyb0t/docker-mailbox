@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import time
+import tomllib
 import uuid
 from pathlib import Path
 
@@ -164,7 +165,10 @@ def test_production_state_survives_restart() -> None:
         started = True
         assert docker("port", name, "8000/tcp").startswith("127.0.0.1:")
         wait_ready(name)
-        assert request(name, "/health")["body"]["version"] == "0.7.0"
+        expected_version = tomllib.loads((root / "pyproject.toml").read_text())["project"][
+            "version"
+        ]
+        assert request(name, "/health")["body"]["version"] == expected_version
         assert request(name, "/mailboxes")["status"] == 401
         response = request(
             name,

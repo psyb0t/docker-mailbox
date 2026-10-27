@@ -66,6 +66,20 @@ A token entry is either a mapping `{name, token, scopes, mailboxes, dry_run}` or
 
 `smtp.identities` lists the addresses a mailbox may send as, each with an optional display `name`, `signature_text` and `signature_html`. Without `identities`, one is derived from `from_address`. Sending, replying and drafting take an `identity` argument (an address); the legacy `from_address` field is still accepted but must match an identity. Anything else is refused with `422 invalid_identity` and the list of allowed addresses. Signatures are appended to the text (`-- ` separator) and HTML bodies unless the request passes `"signature": false`.
 
+For a catch-all domain, add an opt-in `*@domain` pattern alongside a concrete default:
+
+```yaml
+identities:
+  - { address: contact@example.com, name: Contact, default: true }
+  - address: "*@example.com"
+    name: Contact
+    signature_text: "Contact team"
+```
+
+An explicit `identity: shop@example.com` uses that concrete address with the pattern's name and signatures. Exact identities take priority over patterns, regardless of configuration order. Patterns match only their exact domain, case-insensitively, never subdomains or suffixes. Partial local-part patterns and domain wildcards are rejected at startup. A pattern cannot be the default or be sent literally; at least one concrete identity is required. Without `default: true`, the first concrete identity is the default.
+
+Replies without an explicit identity first look for an exact identity anywhere in To/Cc. Otherwise they use the first matching address in To, then Cc, with the pattern's name and signatures. If neither matches, including Bcc-only delivery, they use the concrete default. Reply-all excludes all addresses covered by configured patterns as your own addresses. Only configure a pattern for a domain whose addresses this mailbox may send as; the SMTP provider must also permit those senders. Existing exact-only configurations remain exact-only. HTTP and MCP use the same rules, including draft creation, updates and sender revalidation when sending a saved draft.
+
 ## State volume
 
 `state.path` (env `MAILBOXD_STATE_PATH`, default `/var/lib/mailboxd/state.db`) is a SQLite database in WAL mode, shared by all uvicorn workers and by `mailboxd watch`. It stores audit metadata, send counters, named checkpoints, draft send claims and webhook delivery records. Queued webhooks include message headers, but never bodies or attachments. Mount a volume on `/var/lib/mailboxd` to preserve state when recreating containers. The image creates the directory owned by the unprivileged `mailboxd` user. See [persistence and recovery](operations.md#persistence).

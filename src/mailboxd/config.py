@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from email.errors import HeaderParseError
 from email.headerregistry import Address
 from email.utils import parseaddr
 from pathlib import Path
@@ -26,6 +27,10 @@ DEFAULT_CONFIG_PATH = "/etc/mailboxd/config.yaml"
 DEFAULT_STATE_PATH = "/var/lib/mailboxd/state.db"
 _NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _ENV_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+_IDENTITY_PATTERN_RE = re.compile(
+    r"\*@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
+)
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +49,7 @@ class ImapConfig(BaseModel):
 
 
 class Identity(BaseModel):
-    """A sender identity a mailbox may send as (address + display name)."""
+    """An exact sender or an opt-in `*@domain` identity template."""
 
     address: str
     name: str = ""
@@ -56,9 +61,31 @@ class Identity(BaseModel):
     @classmethod
     def _check_address(cls, v: str) -> str:
         v = v.strip()
-        if "@" not in v or any(c in v for c in "<>\r\n ,"):
+        if (
+            "@" not in v
+            or any(c in v for c in "<> ,")
+            or any(ord(c) < 32 or ord(c) == 127 for c in v)
+        ):
             raise ValueError(f"identity address {v!r} must be a bare email address")
+        if "*" in v and not _IDENTITY_PATTERN_RE.fullmatch(v):
+            raise ValueError("identity patterns must have the form *@domain with an exact domain")
         return v
+
+    @property
+    def is_pattern(self) -> bool:
+        return self.address.startswith("*@")
+
+    def matches(self, address: str) -> bool:
+        """Match an exact address or a valid concrete address in this pattern's domain."""
+        if not self.is_pattern:
+            return self.address.lower() == address.lower()
+        if "*" in address or any(ord(c) < 32 or ord(c) == 127 for c in address):
+            return False
+        try:
+            parsed = Address(addr_spec=address)
+        except (ValueError, HeaderParseError):
+            return False
+        return bool(parsed.username) and parsed.domain.lower() == self.address[2:].lower()
 
     def formatted(self) -> str:
         # Unencoded (e.g. "L'équipe CGS" <contact@x>); the SMTP policy encodes it on the wire.
@@ -80,6 +107,15 @@ class SmtpConfig(BaseModel):
     # Per-mailbox override of send_guard.per_hour.
     per_hour: int | None = Field(default=None, ge=0)
 
+    @model_validator(mode="after")
+    def _concrete_default(self) -> "SmtpConfig":
+        identities = self.all_identities()
+        if any(i.is_pattern and i.default for i in identities):
+            raise ValueError("a wildcard identity cannot be the default sender")
+        if all(i.is_pattern for i in identities):
+            raise ValueError("smtp.identities requires at least one concrete sender")
+        return self
+
     def all_identities(self) -> list[Identity]:
         """Configured identities, or one derived from `from_address`."""
         if self.identities:
@@ -92,7 +128,7 @@ class SmtpConfig(BaseModel):
         for i in ids:
             if i.default:
                 return i
-        return ids[0]
+        return next(i for i in ids if not i.is_pattern)
 
 
 class FoldersConfig(BaseModel):

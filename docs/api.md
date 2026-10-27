@@ -15,7 +15,7 @@ Errors carry an `error` object with `code`, `message` and optional `details`, pl
 | `404`  | `not_found`          | Unknown mailbox, message or part, or a mailbox outside the token's allowlist. |
 | `409`  | `conflict`           | The mailbox lacks the protocol, or the action does not apply (e.g. permanent delete outside Trash). |
 | `413`  | `too_large`          | Request body, attachment or message read from IMAP exceeds its configured size limit. |
-| `422`  | `validation_error` / `invalid_identity` | Bad request body, or a sender address that is not a configured identity.          |
+| `422`  | `validation_error` / `invalid_identity` | Bad request body, or a sender address not authorized by configured identities. |
 | `429`  | `rate_limited`       | Hourly send limit reached. `Retry-After` header and `details.retry_after`.                  |
 | `502`  | `imap_error` / `smtp_error` | The upstream server said no.                                                         |
 
@@ -127,6 +127,8 @@ At least one of `body_text` / `body_html` is required (both = `multipart/alterna
 
 `POST .../messages/{uid}/reply` body: `{"body_text", "body_html", "reply_all": false, "identity", "attachments": [], "quote": true, "draft": false, "signature": true, "dry_run": false}`. The server, not the caller, fills the recipients (`Reply-To`, else `From`; with `reply_all` also To/Cc minus your own addresses), the `Re:` subject, `In-Reply-To` and `References`. Replying to your own sent message goes to the original recipients. After a real send the original gets `\Answered`. With `"draft": true` the reply is saved in Drafts and only needs the `draft` scope.
 
+With no explicit `identity`, replies prefer an exact configured identity in To/Cc, then the first To/Cc address matching a configured `*@domain` pattern, then the concrete default. Pattern matches inherit the configured name and signatures. Reply-all excludes matching aliases. See [identities and signatures](configuration.md#identities-and-signatures) for configuration and domain boundaries.
+
 A send result looks like:
 
 ```json
@@ -183,7 +185,7 @@ Plain streamable-HTTP MCP at `/mcp`: `POST` ships requests, `GET` opens the SSE 
 - **Two-step drafts.** An agent with `draft` saves a message (APPEND with `\Draft \Seen`, header `X-Mailboxd-Draft-By: <token name>`). Someone with `send` reviews it and calls send-draft: the server strips `X-Mailboxd-*` headers, refreshes `Date`, re-validates the sender identity, delivers, files the Sent copy and removes the draft.
 - **Dry run.** Sends are only previewed when `send_guard.dry_run`, the token's `dry_run` or the request's `dry_run` is true. A request can only turn dry-run on. A dry run is audited and does not count against the rate limit.
 - **Rate limit.** `send_guard.per_hour` (override `smtp.per_hour`) caps real sends per rolling hour, separately per mailbox and per token, atomically across workers. Over the limit: `429`, `Retry-After`.
-- **Identity check.** The From address must be a configured identity (`422 invalid_identity` otherwise). The server also validates recipients and refuses CR/LF in any header value.
+- **Identity check.** The concrete From address must match an exact configured identity or an opt-in `*@domain` pattern (`422 invalid_identity` otherwise). A wildcard string cannot be sent literally. The server also validates recipients and refuses CR/LF in any header value.
 - **No implicit "read".** Messages are fetched with `BODY.PEEK`; only `mark_seen` changes `\Seen`.
 - **Audit.** Every mutation and every denied mutation is written to the state database; query it with `GET /audit` or the `audit_log` tool.
 - **No cross-mailbox leaks.** A hidden mailbox is indistinguishable from a missing one.

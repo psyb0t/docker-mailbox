@@ -35,20 +35,22 @@ class OutgoingAttachment:
 def resolve_identity(
     smtp: SmtpConfig, identity: str | None = None, from_address: str | None = None
 ) -> Identity:
-    """Pick the configured identity matching `identity` / `from_address`, else the default.
-
-    Anything that does not match a configured identity is refused: an agent
-    cannot invent a sender address.
-    """
+    """Resolve a concrete sender, preferring exact identities over domain templates."""
     wanted = identity or from_address
     if not wanted:
         return smtp.default_identity()
-    _, addr = parseaddr(wanted)
-    addr = (addr or wanted).strip().lower()
-    for ident in smtp.all_identities():
-        if ident.address.lower() == addr:
-            return ident
     allowed = [i.address for i in smtp.all_identities()]
+    if any(ord(c) < 32 or ord(c) == 127 for c in wanted):
+        raise InvalidIdentity("sender identity contains control characters", allowed=allowed)
+    addresses = getaddresses([wanted])
+    addr = addresses[0][1] if len(addresses) == 1 else ""
+    if addr and "*" not in addr:
+        for ident in smtp.all_identities():
+            if not ident.is_pattern and ident.matches(addr):
+                return ident
+        for ident in smtp.all_identities():
+            if ident.is_pattern and ident.matches(addr):
+                return ident.model_copy(update={"address": addr, "default": False})
     raise InvalidIdentity(f"{wanted!r} is not a configured sender identity", allowed=allowed)
 
 
@@ -101,11 +103,17 @@ def reply_fields(original: Message, own: set[str], reply_all: bool) -> dict[str,
     primary = [a for a in getaddresses([reply_to or sender]) if "@" in a[1]]
     to: list[str] = []
     seen: set[str] = set()
+    own_patterns = [Identity(address=a) for a in own if a.startswith("*@")]
 
     def add(dst: list[str], pairs: list[tuple[str, str]]) -> None:
         for name, addr in pairs:
             key = addr.lower()
-            if "@" not in addr or key in seen or key in own:
+            if (
+                "@" not in addr
+                or key in seen
+                or key in own
+                or any(i.matches(addr) for i in own_patterns)
+            ):
                 continue
             seen.add(key)
             dst.append(f"{name} <{addr}>" if name else addr)

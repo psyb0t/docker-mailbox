@@ -131,9 +131,9 @@ mailboxes:
       # Legacy single sender. With no `identities` below it becomes the only identity.
       from_address: "L'équipe CGS <contact@cgs.example>"
 
-      # Sender identities. A send / reply / draft can only use one of these
-      # (`identity` argument); anything else is refused with 422 invalid_identity.
-      # Exactly one may be `default: true` (otherwise the first one is).
+      # Exact sender identities and optional *@domain templates. Requests supply
+      # a concrete `identity`; unmatched senders get 422 invalid_identity.
+      # Set a concrete `default: true`, or the first concrete identity is used.
       identities:
         - address: contact@cgs.example
           name: "L'équipe CGS"
@@ -145,6 +145,11 @@ mailboxes:
         - address: support@cgs.example
           name: "Support CGS"
           signature_text: "Support CGS. réponse sous 48 h"
+        # Optional catch-all. Authorizes every local part in this exact domain.
+        # Exact identities win. Never use a pattern as the default or sender.
+        # - address: "*@cgs.example"
+        #   name: "L'équipe CGS"
+        #   signature_text: "L'équipe CGS"
 
       save_sent: true       # APPEND a copy to the Sent folder after sending. Set false for
                             # providers that already file sent mail themselves (Gmail).
