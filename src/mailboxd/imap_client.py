@@ -522,8 +522,14 @@ class Session:
 def session(
     cfg: ImapConfig, message_max_bytes: int = DEFAULT_MESSAGE_MAX_BYTES
 ) -> Iterator[Session]:
-    with _connect(cfg, message_max_bytes) as conn:
-        yield Session(conn, cfg, message_max_bytes)
+    """An authenticated `Session`. Socket failures (refused, DNS, timeout) and
+    protocol errors surface as `ImapError`, so callers report a mail server
+    failure instead of an internal error."""
+    try:
+        with _connect(cfg, message_max_bytes) as conn:
+            yield Session(conn, cfg, message_max_bytes)
+    except (OSError, imaplib.IMAP4.error) as e:
+        raise ImapError(str(e) or type(e).__name__) from e
 
 
 def special_folder(cfg: ImapConfig, folders: FoldersConfig, kind: str) -> str:

@@ -33,7 +33,7 @@ Message identifiers are UIDs, scoped to a mailbox, IMAP folder and UIDVALIDITY g
 
 ```bash
 curl -s $MAILBOX_URL/health
-# {"ok": true, "version": "0.8.0"}
+# {"ok": true, "version": "0.8.1"}
 ```
 
 ### Mailboxes

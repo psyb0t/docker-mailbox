@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.1
+
+- An IMAP server that cannot be reached (connection refused, DNS failure, timeout) or that drops the connection mid-command now returns `502 imap_error` over HTTP and `imap_error` over MCP. Most routes previously answered with a plain-text `500 Internal Server Error`, and MCP with `internal_error`.
+- `mailboxd http` checks the config before starting workers and exits with status 2 on an invalid one. The image now starts through `mailboxd http`. With more than one worker, an invalid config previously left uvicorn restarting workers forever while the container stayed up as unhealthy.
+- Config validation errors list each failing field and rule, for example `mailboxes.0.imap.port: Input should be a valid integer`, instead of a generic message. Field values are never printed.
+- The `recipient` search filter descriptions now say what it matches: To, Cc, `Delivered-To` and `X-Original-To`. The MCP description wrongly said Bcc.
+- Documentation moved to a site at https://psyb0t.github.io/docker-mailbox/ and was checked against the code, with new pages for installation, the MCP server, safety and security, webhooks and troubleshooting.
+
 ## v0.8.0
 
 - Support opt-in `*@domain` sender identities for sends, replies and drafts, with inherited names and signatures. Exact identities take priority; automatic replies select the first matching To/Cc alias before falling back to the concrete default.

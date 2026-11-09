@@ -25,10 +25,13 @@ def _config(tls="ssl"):
 
 
 @pytest.mark.parametrize("host", [None, "0.0.0.0"])
-def test_cli_loopback_default_and_explicit_override(monkeypatch, host):
+def test_cli_loopback_default_and_explicit_override(monkeypatch, tmp_path, host):
     run = Mock()
     monkeypatch.setattr("uvicorn.run", run)
     monkeypatch.setenv("WORKERS", "1")
+    config = tmp_path / "config.yaml"
+    config.write_text("mailboxes: [{name: a, imap: {host: h, username: u, password: p}}]\n")
+    monkeypatch.setenv("MAILBOXD_CONFIG", str(config))
     arguments = ["http"] if host is None else ["http", "--host", host]
     assert main(arguments) == 0
     assert run.call_args.kwargs["host"] == (host or "127.0.0.1")
@@ -74,9 +77,9 @@ def test_login_failure_closes_connection_and_preserves_original_error(imap_conne
 def test_starttls_failure_closes_connection(imap_connection):
     error = OSError("TLS unavailable")
     imap_connection.starttls.side_effect = error
-    with pytest.raises(OSError) as failure:
+    with pytest.raises(ImapError) as failure:
         list_folders(_config("starttls"))
-    assert failure.value is error
+    assert failure.value.__cause__ is error
     imap_connection.login.assert_not_called()
     imap_connection.logout.assert_called_once()
 

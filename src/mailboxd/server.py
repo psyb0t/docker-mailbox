@@ -227,7 +227,9 @@ P = Depends(principal_dependency)
 def _criteria(
     from_: str | None = Query(None, alias="from"),
     to: str | None = Query(None),
-    recipient: str | None = Query(None, description="To or Cc contains"),
+    recipient: str | None = Query(
+        None, description="To, Cc, Delivered-To or X-Original-To contains"
+    ),
     subject: str | None = Query(None),
     body: str | None = Query(None),
     text: str | None = Query(None),

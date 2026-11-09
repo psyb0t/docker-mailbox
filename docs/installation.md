@@ -67,11 +67,11 @@ Run one watcher per state database. It needs `watch.webhooks` entries in the con
 
 ## CLI
 
-The image's `mailboxd` command has three modes. The default container command runs uvicorn directly, which is the same as `mailboxd http --host 0.0.0.0 --workers $WORKERS`.
+The image's `mailboxd` command has three modes. The default container command is `mailboxd http --host 0.0.0.0 --port 8000 --workers $WORKERS`.
 
 | Command | What it does |
 | --- | --- |
-| `mailboxd http [--host H] [--port P] [--workers N] [--config PATH]` | HTTP API plus MCP at `/mcp`. Defaults: host `127.0.0.1`, port `8000`, workers from `WORKERS` or 1 |
+| `mailboxd http [--host H] [--port P] [--workers N] [--config PATH]` | HTTP API plus MCP at `/mcp`. Defaults: host `127.0.0.1`, port `8000`, workers from `WORKERS` or 1. Checks the config first and exits with 2 if it is invalid |
 | `mailboxd watch [--config PATH]` | The webhook watcher. Exits with 2 on a config error or when no IMAP mailbox has a matching webhook, and with 1 when one of its threads dies |
 | `mailboxd watch-health [--config PATH]` | Exits with 0 when a watcher using the same state database wrote a heartbeat in the last 90 seconds, 1 otherwise |
 | `mailboxd --version` | Prints the version |

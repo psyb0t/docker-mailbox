@@ -83,7 +83,10 @@ _STR_LIST: dict[str, Any] = {"type": "array", "items": {"type": "string"}}
 _CRITERIA_PROPS: dict[str, Any] = {
     "from": {"type": "string", "description": "Match the From header."},
     "to": {"type": "string", "description": "Match the To header."},
-    "recipient": {"type": "string", "description": "Match To, Cc or Bcc."},
+    "recipient": {
+        "type": "string",
+        "description": "Match To, Cc, Delivered-To or X-Original-To.",
+    },
     "subject": {"type": "string"},
     "body": {"type": "string", "description": "Match the message body."},
     "text": {"type": "string", "description": "Full-text match on headers and body."},

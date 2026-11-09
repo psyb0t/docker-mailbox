@@ -21,7 +21,7 @@ from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import yaml
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 DEFAULT_CONFIG_PATH = "/etc/mailboxd/config.yaml"
 DEFAULT_STATE_PATH = "/var/lib/mailboxd/state.db"
@@ -348,6 +348,15 @@ def _interpolate(value: Any, where: str = "") -> Any:
     return value
 
 
+def _describe(err: ValidationError) -> str:
+    """Field paths and rule messages only: input values may hold passwords or tokens."""
+    parts = []
+    for e in err.errors(include_input=False, include_url=False):
+        where = ".".join(str(x) for x in e["loc"]) or "config"
+        parts.append(f"{where}: {e['msg']}")
+    return "; ".join(parts)
+
+
 def load_config(path: str | None = None) -> Config:
     cfg_path = path or os.environ.get("MAILBOXD_CONFIG") or DEFAULT_CONFIG_PATH
     p = Path(cfg_path)
@@ -364,6 +373,8 @@ def load_config(path: str | None = None) -> Config:
     raw = _interpolate(raw)
     try:
         cfg = Config.model_validate(raw)
+    except ValidationError as e:
+        raise ConfigError(f"config {cfg_path} invalid: {_describe(e)}") from e
     except ValueError as e:
         raise ConfigError(f"config {cfg_path} invalid; check field types and references") from e
     legacy = [t for t in cfg.auth.tokens if isinstance(t, str)]

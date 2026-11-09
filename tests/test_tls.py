@@ -106,8 +106,9 @@ def test_tls_verifies_peer(
     if trust and host == "localhost":
         operation()
     else:
-        with pytest.raises((ssl.SSLCertVerificationError, smtp_client.SmtpError)):
+        with pytest.raises((imap_client.ImapError, smtp_client.SmtpError)) as failure:
             operation()
+        assert isinstance(failure.value.__cause__, ssl.SSLCertVerificationError)
 
 
 @pytest.mark.parametrize("protocol", ["imap", "smtp"])

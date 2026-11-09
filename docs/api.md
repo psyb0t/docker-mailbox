@@ -43,9 +43,9 @@ Errors carry an `error` object with `code`, `message` and optional `details`, pl
 | `422` | `validation_error` | Bad body or parameters. FastAPI validation errors list each problem in `details.errors` |
 | `422` | `invalid_identity` | Sender address not covered by the configured identities. `details.allowed` lists them |
 | `429` | `rate_limited` | Hourly send limit reached. `Retry-After` header and `details.retry_after`, in seconds |
-| `502` | `imap_error` / `smtp_error` | The mail server refused a command or the login. The message is always `mail server operation failed` |
+| `502` | `imap_error` / `smtp_error` | The mail server refused a command or the login, or could not be reached (connection refused, DNS failure, timeout). The message is always `mail server operation failed` |
 
-A mail server that cannot be reached at all (connection refused, DNS failure, timeout) currently returns a plain-text `500 Internal Server Error` on most routes instead of `502`. `/inbox` reports it per account in `errors`, and sends report it as `smtp_error`.
+`/inbox` reports a failing account in `errors` instead and still answers for the others.
 
 ### Conflicts
 

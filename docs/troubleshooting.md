@@ -8,7 +8,7 @@ nav_order: 10
 
 ## Startup errors
 
-The server checks the config before it accepts requests. The first log line names the problem:
+`mailboxd http` and `mailboxd watch` check the config before doing anything else. On a problem they print one line starting with `mailboxd:` and exit with status 2:
 
 | Message | Cause and fix |
 | --- | --- |
@@ -16,7 +16,7 @@ The server checks the config before it accepts requests. The first log line name
 | `config <path> is not valid YAML` | Fix the YAML syntax |
 | `config <path> must be a YAML mapping` | The top level must be keys and values, not a list or a scalar |
 | `environment variable 'NAME' referenced at <field> is unset` | The config uses `${NAME}`; pass it with `--env-file` or `-e` |
-| `config <path> invalid; check field types and references` | A field failed validation. The traceback below it names the field and the rule, for example `token 'a' references unknown mailboxes: ['nope']` |
+| `config <path> invalid: <field>: <rule>` | A field failed validation. Each problem is listed as its field path and rule, for example `mailboxes.0.imap.port: Input should be a valid integer` or `config: Value error, token 'a' references unknown mailboxes: ['nope']`. Field values are never printed |
 
 Validation rules that commonly fail:
 
@@ -28,7 +28,7 @@ Validation rules that commonly fail:
 - identity addresses must be bare addresses or `*@domain`; a pattern cannot be the default, and at least one concrete identity is required;
 - webhook URLs need `http` or `https` and a host name, without user info or a fragment.
 
-With the image default of 2 workers, uvicorn keeps restarting workers that fail to load the config, so the container stays up and its healthcheck reports `unhealthy`. Read `docker logs`. With `WORKERS=1` the container exits with status 1 instead.
+The container exits too, so `docker logs` shows the line. Releases before v0.8.1 started uvicorn directly; with more than one worker they kept restarting the failing workers and the container stayed up as `unhealthy`.
 
 A state database created by a newer mailboxd is refused the first time a request or the watcher uses it, with `state database was created by a newer mailboxd version` in the log. Restore a backup taken with the older version, or run the newer image.
 
@@ -56,8 +56,7 @@ A state database created by a newer mailboxd is refused the first time a request
 | `413 too_large` | Raise the matching [limit](configuration.md#limits). Over MCP, download big attachments over HTTP instead |
 | `422 invalid_identity` | Use one of the addresses in `details.allowed`, or add an identity |
 | `429 rate_limited` | Wait `Retry-After` seconds, or raise `per_hour` |
-| `502 imap_error`, `502 smtp_error` | The server refused the login or a command. Run `GET /health/deep` with an admin token to see its message |
-| Plain-text `500 Internal Server Error` | Usually a mail server that cannot be reached at all. Check host, port and `tls`, then `GET /health/deep` |
+| `502 imap_error`, `502 smtp_error` | The server refused the login or a command, or could not be reached. Check host, port and `tls`, then run `GET /health/deep` with an admin token to see the server's own message |
 
 ## TLS
 

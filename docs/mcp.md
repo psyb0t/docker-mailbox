@@ -92,4 +92,4 @@ A failed call is a tool result with `isError: true` and the same shape as an HTT
 {"error": {"code": "permission_denied", "message": "…", "details": {"required_scope": "send"}}}
 ```
 
-Codes are the HTTP API's (`permission_denied`, `not_found`, `conflict`, `too_large`, `validation_error`, `invalid_identity`, `rate_limited`, `imap_error`, `smtp_error`), plus `internal_error` for anything unexpected, such as a mail server that cannot be reached. An unknown tool name returns `not_found`.
+Codes are the HTTP API's (`permission_denied`, `not_found`, `conflict`, `too_large`, `validation_error`, `invalid_identity`, `rate_limited`, `imap_error`, `smtp_error`), plus `internal_error` for anything unexpected. An unknown tool name returns `not_found`.

@@ -59,6 +59,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode == "http":
         import uvicorn
 
+        from .config import ConfigError, load_config
+
+        # Workers load the config themselves, but a failing worker is respawned
+        # forever; refuse once, before any worker starts.
+        try:
+            load_config()
+        except ConfigError as e:
+            print(f"mailboxd: {e}", file=sys.stderr)
+            return 2
         uvicorn.run(
             "mailboxd.server:create_app",
             host=args.host,
