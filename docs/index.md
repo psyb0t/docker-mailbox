@@ -15,7 +15,7 @@ mailbox (the `mailboxd` service, image `psyb0t/mailbox`) reads, organizes, draft
 HTTP client ─┐                                  ┌─ IMAP server
              ├─ bearer token ─ Service (scopes) ┤
 MCP host ────┘                 │                └─ SMTP server
-                               └─ state.db (SQLite): audit, send limits, checkpoints, webhook queue
+                               └─ state.db: audit, send limits, checkpoints, webhooks
 
 mailboxd watch ─ IMAP IDLE ─ signed webhooks
 ```
@@ -62,9 +62,16 @@ docker run --rm \
 ```bash
 TOKEN="paste-the-token-here"
 
-curl -s http://localhost:8000/health | jq      # always open, no token
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/mailboxes | jq
-curl -s -H "Authorization: Bearer $TOKEN" 'http://localhost:8000/inbox?limit=5' | jq
+# Health is always open, no token needed.
+curl -s http://localhost:8000/health | jq
+
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/mailboxes | jq
+
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8000/inbox?limit=5' | jq
 ```
 
 4. Point an MCP client at `http://localhost:8000/mcp` with the same bearer token. See [MCP server](mcp.md).

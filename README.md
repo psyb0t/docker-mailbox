@@ -48,9 +48,16 @@ docker run --rm \
 ```bash
 TOKEN="paste-the-token-here"
 
-curl -s http://localhost:8000/health | jq                                               # health is always open
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/mailboxes | jq
-curl -s -H "Authorization: Bearer $TOKEN" 'http://localhost:8000/inbox?limit=5' | jq
+# Health is always open, no token needed.
+curl -s http://localhost:8000/health | jq
+
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8000/mailboxes | jq
+
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8000/inbox?limit=5' | jq
 ```
 
 ### Docker Compose

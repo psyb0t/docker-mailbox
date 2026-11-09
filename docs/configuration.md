@@ -18,7 +18,8 @@ Any string may contain `${NAME}`, which is replaced by that environment variable
 log_level: INFO
 
 auth:
-  trusted_authserv_id: mx.cgs.example   # see "Authentication-Results trust" on the security page
+  # See "Authentication-Results trust" on the security page.
+  trusted_authserv_id: mx.cgs.example
   tokens:
     - name: mila
       token: ${MAILBOXD_TOKEN_MILA}
@@ -29,18 +30,28 @@ auth:
 mailboxes:
   - name: contact
     description: "Contact inbox"
-    imap: { host: imap.example.com, username: contact@cgs.example, password: "${PW}" }
+    imap:
+      host: imap.example.com
+      username: contact@cgs.example
+      password: ${PW}
     smtp:
       host: smtp.example.com
       username: contact@cgs.example
       password: ${PW}
       from_address: "L'équipe CGS <contact@cgs.example>"
       identities:
-        - { address: contact@cgs.example, name: "L'équipe CGS", default: true }
-        - { address: support@cgs.example, name: "Support CGS" }
+        - address: contact@cgs.example
+          name: "L'équipe CGS"
+          default: true
+        - address: support@cgs.example
+          name: "Support CGS"
       save_sent: true
       per_hour: 20
-    folders: { sent: null, drafts: null, trash: null, junk: null }   # null = auto-detect
+    folders:          # null = auto-detect
+      sent: null
+      drafts: null
+      trash: null
+      junk: null
 ```
 
 ## Reference
@@ -145,7 +156,9 @@ For a catch-all domain, add an opt-in `*@domain` pattern next to a concrete defa
 
 ```yaml
 identities:
-  - { address: contact@example.com, name: Contact, default: true }
+  - address: contact@example.com
+    name: Contact
+    default: true
   - address: "*@example.com"
     name: Contact
     signature_text: "Contact team"
@@ -163,7 +176,9 @@ Only add a pattern for a domain this mailbox may really send as; the SMTP provid
 ## Send guard
 
 ```yaml
-send_guard: { dry_run: false, per_hour: 60 }
+send_guard:
+  dry_run: false
+  per_hour: 60
 ```
 
 - `per_hour` caps real sends per rolling hour, separately per mailbox and per token, 0 for unlimited. `smtp.per_hour` replaces it for one mailbox's limit; the per-token limit always uses `send_guard.per_hour`. Over the limit the API answers `429` with `Retry-After`.
@@ -186,7 +201,10 @@ Details on how attempts are counted are on the [security page](security.md#rate-
 ## Labels
 
 ```yaml
-labels: { suspect: $Suspect, a_traiter: $ATraiter, fait: $Fait }
+labels:
+  suspect: $Suspect
+  a_traiter: $ATraiter
+  fait: $Fait
 ```
 
 Labels are IMAP keywords with friendly names. You pass the friendly names to `set_labels` and to the `label` search filter, plus the built-in `flagged` (`\Flagged`). Unknown names are refused with the list of known ones. Keywords cannot contain spaces, quotes, parentheses, `\`, `%`, `*`, `{` or `]`, and cannot start with `\`.

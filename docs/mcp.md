@@ -18,7 +18,9 @@ Most MCP hosts accept a `.mcp.json` entry like this:
     "mailbox": {
       "transport": "streamable-http",
       "url": "http://localhost:8000/mcp",
-      "headers": { "Authorization": "Bearer YOUR_TOKEN_HERE" }
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN_HERE"
+      }
     }
   }
 }
@@ -89,7 +91,15 @@ The tool descriptions tell the model that message content is untrusted and that 
 A failed call is a tool result with `isError: true` and the same shape as an HTTP error body:
 
 ```json
-{"error": {"code": "permission_denied", "message": "…", "details": {"required_scope": "send"}}}
+{
+  "error": {
+    "code": "permission_denied",
+    "message": "…",
+    "details": {
+      "required_scope": "send"
+    }
+  }
+}
 ```
 
 Codes are the HTTP API's (`permission_denied`, `not_found`, `conflict`, `too_large`, `validation_error`, `invalid_identity`, `rate_limited`, `imap_error`, `smtp_error`), plus `internal_error` for anything unexpected. An unknown tool name returns `not_found`.

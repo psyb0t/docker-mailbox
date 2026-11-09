@@ -53,7 +53,12 @@ Run exactly one watcher per state database. It watches every mailbox that has IM
   "subject": "…",
   "date": "…",
   "message_id": "<…>",
-  "authentication": { "spf": "pass", "dkim": "pass", "dmarc": "pass", "trusted": true },
+  "authentication": {
+    "spf": "pass",
+    "dkim": "pass",
+    "dmarc": "pass",
+    "trusted": true
+  },
   "signals": []
 }
 ```
@@ -88,7 +93,8 @@ def verify(secret: str, timestamp: str, body: bytes, signature: str) -> bool:
         signed = timestamp.encode("ascii") + b"." + body
     except (ValueError, UnicodeEncodeError):
         return False
-    expected = "sha256=" + hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    digest = hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    expected = "sha256=" + digest
     return hmac.compare_digest(expected.encode(), signature.encode())
 ```
 
@@ -111,8 +117,10 @@ Delivery is at least once. A worker leases a delivery for 60 seconds, makes one 
 An admin token can list a mailbox's deliveries:
 
 ```bash
-curl -s -H "Authorization: Bearer $TOKEN" \
-  'http://localhost:8000/mailboxes/contact/webhook-deliveries?limit=100&offset=0' | jq
+curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8000/mailboxes/contact/webhook-deliveries?limit=100&offset=0' \
+  | jq
 ```
 
 The response has `deliveries` (each with `id`, `event_id`, `status`, `attempts` and `next_attempt` in Unix seconds), `limit` (1 to 500), `offset` and `hasMore`. `status` is `pending`, `inflight`, `delivered` or `dead`.

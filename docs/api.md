@@ -28,9 +28,16 @@ The token's scopes and mailbox list decide what it can do; see [Tokens and scope
 Errors carry an `error` object with `code`, `message` and optional `details`, plus a `detail` field for older clients:
 
 ```json
-{"error": {"code": "permission_denied", "message": "token 'drafter' lacks the 'send' scope",
-           "details": {"required_scope": "send"}},
- "detail": "token 'drafter' lacks the 'send' scope"}
+{
+  "error": {
+    "code": "permission_denied",
+    "message": "token 'drafter' lacks the 'send' scope",
+    "details": {
+      "required_scope": "send"
+    }
+  },
+  "detail": "token 'drafter' lacks the 'send' scope"
+}
 ```
 
 | Status | `code` | When |
@@ -128,15 +135,42 @@ Matching is done by the IMAP server, so substring and case rules are the server'
 ```json
 {
   "messages": [
-    { "uid": "1234", "mailbox": "contact", "mailbox_address": "contact@cgs.example", "folder": "INBOX",
-      "from": "boss@corp.com", "to": "contact@cgs.example", "cc": "", "subject": "weekly sync",
-      "date": "…", "message_id": "<…>", "in_reply_to": "", "references": [],
-      "size": 4821, "flags": ["\\Seen"], "labels": [] }
+    {
+      "uid": "1234",
+      "mailbox": "contact",
+      "mailbox_address": "contact@cgs.example",
+      "folder": "INBOX",
+      "from": "boss@corp.com",
+      "to": "contact@cgs.example",
+      "cc": "",
+      "subject": "weekly sync",
+      "date": "…",
+      "message_id": "<…>",
+      "in_reply_to": "",
+      "references": [],
+      "size": 4821,
+      "flags": [
+        "\\Seen"
+      ],
+      "labels": []
+    }
   ],
-  "errors": [{ "mailbox": "support", "error": "login failed: …" }],
+  "errors": [
+    {
+      "mailbox": "support",
+      "error": "login failed: …"
+    }
+  ],
   "next_since_cursor": "eyJjb250YWN0IjpbIjEiLDEyMzRdfQ",
-  "positions": { "contact": { "uidvalidity": "1", "max_uid": 1234, "next_after_uid": 1234,
-                              "more_new": false, "folder": "INBOX" } }
+  "positions": {
+    "contact": {
+      "uidvalidity": "1",
+      "max_uid": 1234,
+      "next_after_uid": 1234,
+      "more_new": false,
+      "folder": "INBOX"
+    }
+  }
 }
 ```
 
@@ -209,14 +243,31 @@ How much to trust these depends on [Authentication-Results trust](security.md#au
 
 ```json
 {
-  "to": ["dest@example.com"], "cc": [], "bcc": ["hidden@example.com"],
+  "to": [
+    "dest@example.com"
+  ],
+  "cc": [],
+  "bcc": [
+    "hidden@example.com"
+  ],
   "subject": "hi",
-  "body_text": "plain text body", "body_html": "<p>optional html body</p>",
+  "body_text": "plain text body",
+  "body_html": "<p>optional html body</p>",
   "identity": "support@cgs.example",
   "reply_to": "noreply@example.com",
   "attachments": [
-    { "filename": "a.pdf", "content_type": "application/pdf", "data_base64": "…" },
-    { "from_message": { "uid": "1234", "part_id": "3", "folder": "INBOX" } }
+    {
+      "filename": "a.pdf",
+      "content_type": "application/pdf",
+      "data_base64": "…"
+    },
+    {
+      "from_message": {
+        "uid": "1234",
+        "part_id": "3",
+        "folder": "INBOX"
+      }
+    }
   ],
   "signature": true,
   "dry_run": false
@@ -230,7 +281,23 @@ How much to trust these depends on [Authentication-Results trust](security.md#au
 - Addresses and the subject cannot contain line breaks.
 - `dry_run` is ignored by `/drafts`.
 
-`POST /mailboxes/{n}/messages/{uid}/reply` takes `{"body_text", "body_html", "reply_all": false, "identity", "attachments": [], "quote": true, "draft": false, "signature": true, "dry_run": false}`. The server fills in the rest from the original message:
+`POST /mailboxes/{n}/messages/{uid}/reply` takes this body. At least one of `body_text` and `body_html` is required; every other value shown is the default:
+
+```json
+{
+  "body_text": "thanks, see you thursday",
+  "body_html": null,
+  "reply_all": false,
+  "identity": null,
+  "attachments": [],
+  "quote": true,
+  "draft": false,
+  "signature": true,
+  "dry_run": false
+}
+```
+
+The server fills in the rest from the original message:
 
 - **To**: Reply-To, else From. Replying to a message you sent goes to its original recipients.
 - **Cc** with `reply_all`: the original To and Cc, minus your own addresses (the IMAP username, every identity, and addresses covered by `*@domain` patterns).
@@ -243,9 +310,21 @@ After a real send the original gets `\Answered`. With `"draft": true` the reply 
 A send returns:
 
 ```json
-{ "dry_run": false, "from": "…", "to": ["…"], "cc": [], "subject": "…",
-  "message_id": "<…@cgs.example>", "sent_copy": { "folder": "Sent", "uid": "42" },
-  "warnings": [] }
+{
+  "dry_run": false,
+  "from": "…",
+  "to": [
+    "…"
+  ],
+  "cc": [],
+  "subject": "…",
+  "message_id": "<…@cgs.example>",
+  "sent_copy": {
+    "folder": "Sent",
+    "uid": "42"
+  },
+  "warnings": []
+}
 ```
 
 With a dry run, nothing is delivered and `preview` holds the headers and text body that would have been sent. `warnings` can hold `sent_copy_failed`, `answered_flag_failed` or `draft_not_removed`: the mail went out, but filing it afterwards failed. Fix those by hand; do not send again. `sent_copy` is `null` when `save_sent` is off.
@@ -258,7 +337,18 @@ With a dry run, nothing is delivered and `preview` holds the headers and text bo
 
 ## Organizing
 
-- `DELETE /messages/{uid}` and `POST /messages/delete` move messages to Trash and return `{"ok": true, "action": "trashed", "method": …, "trash_folder": …}`. `method` is `move`, `copy+uid-expunge` or `copy+flagged-deleted`; the last one means the server lacks `UIDPLUS` and the original was left flagged `\Deleted` rather than expunging the whole folder.
+- `DELETE /messages/{uid}` and `POST /messages/delete` move messages to Trash and return:
+
+  ```json
+  {
+    "ok": true,
+    "action": "trashed",
+    "method": "move",
+    "trash_folder": "Trash"
+  }
+  ```
+
+  `method` is `move`, `copy+uid-expunge` or `copy+flagged-deleted`; the last one means the server lacks `UIDPLUS` and the original was left flagged `\Deleted` rather than expunging the whole folder.
 - With `permanent=true`, `folder` must be the Trash folder, the token needs `delete`, and the server needs `UIDPLUS`. The result has `"action": "deleted"`.
 - `POST /messages/labels` needs at least one of `add` and `remove`.
 - `POST /folders` rejects empty names, names over 200 characters and names with line breaks or NUL.
@@ -271,4 +361,25 @@ Actions are `send`, `reply`, `send_draft`, `create_draft`, `update_draft`, `dele
 
 ## Deep health
 
-`GET /health/deep` returns `{"ok": …, "mailboxes": [{"name", "imap", "smtp"}]}`, where `imap` and `smtp` are `{"ok", "latency_ms", "error"}` or `null` when not configured. It checks only the mailboxes the token can see.
+`GET /health/deep` checks only the mailboxes the token can see. `imap` or `smtp` is `null` when the mailbox does not configure it, and `ok` is `false` when any check failed:
+
+```json
+{
+  "ok": true,
+  "mailboxes": [
+    {
+      "name": "contact",
+      "imap": {
+        "ok": true,
+        "latency_ms": 212,
+        "error": null
+      },
+      "smtp": {
+        "ok": true,
+        "latency_ms": 341,
+        "error": null
+      }
+    }
+  ]
+}
+```

@@ -99,7 +99,9 @@ Pull the new tag and recreate the container with the same state volume. Database
 
 ```bash
 docker compose --profile watch down
-docker volume rm docker-mailbox_mailboxd-state   # Compose prefixes the project name; check `docker volume ls`
+
+# Compose prefixes the volume with the project name; check `docker volume ls`.
+docker volume rm docker-mailbox_mailboxd-state
 ```
 
 Removing the volume deletes the audit log, send counters, checkpoints and the webhook queue. Mail on your IMAP server is not touched.

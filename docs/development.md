@@ -43,15 +43,15 @@ Every tool runs inside the dev image (`psyb0t/mailboxd-dev`), so the host needs 
 make help           # list all targets
 make dev-image      # build the dev image
 make shell          # shell inside it
-make run            # run the server from source; CONFIG=path/to/config.yaml, PORT=8000
-make watch          # run the watcher from source with ./config.yaml
-make test           # full suite, including docker-in-docker and production-container tests
-make test-unit      # in-process tests only; TEST_ARGS=... passes pytest arguments
+make run            # server from source (CONFIG=path/to/config.yaml, PORT=8000)
+make watch          # watcher from source, with ./config.yaml
+make test           # full suite, docker-in-docker and container tests included
+make test-unit      # in-process tests only (TEST_ARGS=... for pytest)
 make test-docker    # production-container tests only
 make test-coverage  # full suite with an 85 percent coverage floor
 make lint           # flake8 and mypy
 make format         # isort and black
-make sec            # semgrep, bandit and pip-audit into sec.sarif; reports, never fails
+make sec            # semgrep, bandit, pip-audit into sec.sarif; never fails
 make audit          # advisories for the frozen runtime and dev dependency graph
 make audit-compose  # check the production Compose defaults
 make build          # build psyb0t/mailbox:latest locally
