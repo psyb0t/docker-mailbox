@@ -1,6 +1,6 @@
 {
   "name": "mailbox",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Read, search, organize, draft, reply and send mail across IMAP/SMTP accounts through REST or MCP with scoped tokens.",
   "author": {
     "name": "psyb0t",

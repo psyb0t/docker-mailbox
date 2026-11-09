@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.2
+
+Documentation only.
+
+- Every JSON example is pretty-printed, including request and response bodies that were written inline in sentences. Long `curl` commands break with backslashes, and the YAML examples use block style.
+- `.gitignore` ignores `*.local.json` files at any depth.
+
 ## v0.8.1
 
 - An IMAP server that cannot be reached (connection refused, DNS failure, timeout) or that drops the connection mid-command now returns `502 imap_error` over HTTP and `imap_error` over MCP. Most routes previously answered with a plain-text `500 Internal Server Error`, and MCP with `internal_error`.
