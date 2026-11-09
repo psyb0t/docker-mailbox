@@ -1,0 +1,51 @@
+title: mailbox
+tagline: IMAP and SMTP accounts behind one HTTP API and MCP server
+description: Self-hosted HTTP API and MCP server for multiple IMAP/SMTP accounts, with scoped tokens, send limits, an audit log and signed new-mail webhooks.
+lang: en
+url: https://psyb0t.github.io
+baseurl: /docker-mailbox
+repository: psyb0t/docker-mailbox
+author: Ciprian Mandache
+
+remote_theme: just-the-docs/just-the-docs@v0.12.0
+color_scheme: mocha
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+  - jekyll-sitemap
+  - jekyll-relative-links
+  - jekyll-include-cache
+
+permalink: pretty
+
+relative_links:
+  enabled: true
+  collections: false
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+      seo:
+        type: TechArticle
+
+search:
+  heading_level: 3
+
+aux_links:
+  GitHub:
+    - https://github.com/psyb0t/docker-mailbox
+aux_links_new_tab: true
+
+nav_external_links:
+  - title: Changelog
+    url: https://github.com/psyb0t/docker-mailbox/blob/main/CHANGELOG.md
+
+gh_edit_link: true
+gh_edit_link_text: Edit this page on GitHub
+gh_edit_repository: https://github.com/psyb0t/docker-mailbox
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: tree

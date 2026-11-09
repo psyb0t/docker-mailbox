@@ -1,20 +1,24 @@
+---
+title: "Configuration"
+description: "Every mailboxd config.yaml field with its default: mailboxes, IMAP and SMTP, bearer tokens and scopes, sender identities, limits, labels and the watcher."
+nav_order: 3
+---
+
 # Configuration
 
-## Container listener and host exposure
+mailboxd reads one YAML file, from `--config`, else `MAILBOXD_CONFIG`, else `/etc/mailboxd/config.yaml`. [`config.example.yaml`](https://github.com/psyb0t/docker-mailbox/blob/main/config.example.yaml) shows every option with comments. Changes take effect when the process restarts.
 
-The image listens on `0.0.0.0:8000` inside the container so Docker port forwarding and other containers can reach it. The standalone `mailboxd http` CLI defaults to `127.0.0.1`. If you replace the image command with `mailboxd http`, add `--host 0.0.0.0`.
+Any string may contain `${NAME}`, which is replaced by that environment variable. A variable that is not set stops startup. Use this to keep passwords, tokens and webhook secrets out of the file.
 
-Publish host-local access with `-p 127.0.0.1:8000:8000`. `-p 8000:8000` publishes on all host interfaces: do that only for deliberate network access, behind HTTPS. The Compose file publishes on loopback by default.
+**The config file holds credentials.** Even with `${ENV}` references it names your accounts and servers. Keep it out of Git, `chmod 600` it and mount it read-only.
 
-## The config file
-
-One YAML file, found via `--config`, `MAILBOXD_CONFIG`, or `/etc/mailboxd/config.yaml`. See [`config.example.yaml`](../config.example.yaml) for every option with comments. Any string may contain `${NAME}`; a variable that is not set is a startup error.
+## A minimal file
 
 ```yaml
 log_level: INFO
 
 auth:
-  trusted_authserv_id: mx.cgs.example   # see "Authentication-Results trust"
+  trusted_authserv_id: mx.cgs.example   # see "Authentication-Results trust" on the security page
   tokens:
     - name: mila
       token: ${MAILBOXD_TOKEN_MILA}
@@ -23,7 +27,7 @@ auth:
       dry_run: false
 
 mailboxes:
-  - name: contact                # URL-safe handle, unique; passed as the `mailbox` argument
+  - name: contact
     description: "Contact inbox"
     imap: { host: imap.example.com, username: contact@cgs.example, password: "${PW}" }
     smtp:
@@ -39,34 +43,105 @@ mailboxes:
     folders: { sent: null, drafts: null, trash: null, junk: null }   # null = auto-detect
 ```
 
-- **At least one mailbox**, and each needs at least one of `imap` / `smtp`.
-- **`name`** matches `[a-zA-Z0-9_-]+` and is unique. It is a URL path segment and the value of the `mailbox` argument of MCP tools. It is not a tool prefix.
-- **Defaults**: IMAP `993/ssl`, SMTP `587/starttls`.
-- **Special folders** (`sent`, `drafts`, `trash`, `junk`): auto-detected from IMAP `SPECIAL-USE` flags, then from usual names (`Sent`, `Sent Items`, `Drafts`, `Trash`, `Corbeille`, `[Gmail]/Trash`, ...). Pin a name to override.
-- **The config file holds plaintext passwords and bearer tokens** unless you use `${ENV}`. Treat it like a credential vault: gitignore it, `chmod 600`, mount it read-only.
+## Reference
+
+### Top level
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `log_level` | `INFO` | Python log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `auth` | no tokens | Bearer tokens and Authentication-Results trust. With no tokens every protected request gets `401` |
+| `mailboxes` | `[]` | The accounts. Names must be unique |
+| `state.path` | `MAILBOXD_STATE_PATH`, else `/var/lib/mailboxd/state.db` | SQLite state database |
+| `send_guard` | `dry_run: false`, `per_hour: 60` | Global send rules |
+| `limits` | see [Limits](#limits) | Size caps |
+| `labels` | `suspect`, `a_traiter`, `fait` | Friendly label names mapped to IMAP keywords |
+| `watch` | no webhooks | The webhook watcher, see [Webhooks](webhooks.md) |
+
+### Mailboxes
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `name` | required | Matches `[a-zA-Z0-9_-]+`, unique. Used in URL paths and as the `mailbox` argument of MCP tools |
+| `description` | `""` | Shown by `GET /mailboxes` and the `mailboxes` tool |
+| `imap` | none | Reading and organizing. At least one of `imap` and `smtp` is required |
+| `smtp` | none | Sending |
+| `folders.sent`, `.drafts`, `.trash`, `.junk` | `null` (auto-detect) | Pin a special folder by name |
+
+A client can name a mailbox by its `name`, or by its IMAP or SMTP `username` when that is an address.
+
+| `imap` field | Default | Meaning |
+| --- | --- | --- |
+| `host` | required | Server hostname |
+| `port` | `993` | 1 to 65535 |
+| `tls` | `ssl` | `ssl`, `starttls` or `none` |
+| `username`, `password` | required | Login |
+| `default_folder` | `INBOX` | Folder used when a request names none |
+
+| `smtp` field | Default | Meaning |
+| --- | --- | --- |
+| `host` | required | Server hostname |
+| `port` | `587` | 1 to 65535 |
+| `tls` | `starttls` | `ssl`, `starttls` or `none` |
+| `username`, `password` | required | Login. An empty `username` skips SMTP authentication |
+| `from_address` | required | Legacy single sender. Becomes the only identity when `identities` is empty |
+| `identities` | `[]` | Sender addresses this mailbox may use, see [Identities and signatures](#identities-and-signatures) |
+| `save_sent` | `true` | Append a copy of each sent message to the Sent folder. Set `false` for providers that file sent mail themselves, such as Gmail |
+| `per_hour` | `send_guard.per_hour` | Per-mailbox send limit, 0 for unlimited |
+
+`ssl` and `starttls` verify the server certificate chain and hostname, and there is no setting to turn that off. Trust a private CA with `SSL_CERT_FILE` (see [Installation](installation.md#environment-variables)). IMAP and SMTP sockets time out after 30 seconds.
+
+Special folders are auto-detected from the IMAP `SPECIAL-USE` flags, then from common names:
+
+| Kind | Names tried |
+| --- | --- |
+| sent | `Sent`, `Sent Items`, `Sent Messages`, `INBOX.Sent`, `Envoyés`, `Sent Mail` |
+| drafts | `Drafts`, `INBOX.Drafts`, `Brouillons`, `Draft` |
+| trash | `Trash`, `Deleted Items`, `Deleted Messages`, `INBOX.Trash`, `Corbeille`, `Bin` |
+| junk | `Junk`, `Spam`, `INBOX.Junk`, `INBOX.Spam`, `Junk E-mail`, `Indésirables` |
 
 ## Tokens and scopes
 
-Every request except `GET /health` needs `Authorization: Bearer <token>`. Tokens are compared in constant time. The same gate covers `/mcp`.
+Every request except `GET /health` needs `Authorization: Bearer <token>`, including `/mcp`. Tokens are compared in constant time.
 
-A token entry is either a mapping `{name, token, scopes, mailboxes, dry_run}` or, for backwards compatibility, a bare string. A bare string is named `legacy-N`, holds **every scope on every mailbox** and logs a warning at startup. `name` is what shows up in the audit log and in draft headers; it must be unique.
+| Token field | Default | Meaning |
+| --- | --- | --- |
+| `name` | required | Unique. Shown in the audit log and in the `X-Mailboxd-Draft-By` header of drafts |
+| `token` | required | The bearer value. Unique and not empty. `openssl rand -hex 32` makes a good one |
+| `scopes` | **all six scopes** | What the token may do |
+| `mailboxes` | `"*"` | A list of mailbox names, or `"*"` for all |
+| `dry_run` | `false` | `true` turns every send by this token into a preview |
 
-| Scope      | Allows                                                                                                              |
-| ---------- | ------------------------------------------------------------------------------------------------------------------- |
-| `read`     | List, search, read, raw source, attachments, threads, identities, stats, list drafts.                               |
-| `draft`    | Create, update and delete drafts; prepare a reply as a draft.                                                       |
-| `organize` | Mark read/unread, labels, move, create folder, delete to Trash.                                                     |
-| `send`     | Send, reply directly, send a draft.                                                                                 |
-| `delete`   | Permanent deletion (only from the Trash folder).                                                                    |
-| `admin`    | Audit records, deep health, webhook delivery inspection and replay, within the mailbox allowlist. |
+**Always list `scopes` and `mailboxes` explicitly.** A token entry that leaves them out gets every scope on every mailbox.
 
-`mailboxes` is a list of mailbox names or `"*"`. A mailbox outside the list behaves exactly like one that does not exist (`404`), so a restricted token cannot even learn its name. `dry_run: true` forces every send by that token to be previewed only; a request can switch dry-run on but never off.
+A bare string instead of a mapping is the legacy form. It is named `legacy-N` (N is its position in the list), gets every scope on every mailbox, and logs a warning at startup.
+
+| Scope | Allows |
+| --- | --- |
+| `read` | List, search and read messages, raw source, attachments, threads, folders, identities, stats, list drafts |
+| `draft` | Create, update and delete drafts; save a reply as a draft |
+| `organize` | Mark read/unread, labels, move, create folders, delete to Trash |
+| `send` | Send, reply directly, send a draft |
+| `delete` | Permanent deletion, only from the Trash folder |
+| `admin` | Audit log, deep health check, webhook delivery listing and replay, all limited to the token's mailboxes |
+
+A mailbox outside a token's `mailboxes` list behaves exactly like one that does not exist (`404`), so a restricted token cannot learn its name. `GET /mailboxes` needs only a valid token, no scope.
 
 ## Identities and signatures
 
-`smtp.identities` lists the addresses a mailbox may send as, each with an optional display `name`, `signature_text` and `signature_html`. Without `identities`, one is derived from `from_address`. Sending, replying and drafting take an `identity` argument (an address); the legacy `from_address` field is still accepted but must match an identity. Anything else is refused with `422 invalid_identity` and the list of allowed addresses. Signatures are appended to the text (`-- ` separator) and HTML bodies unless the request passes `"signature": false`.
+`smtp.identities` lists the addresses a mailbox may send as:
 
-For a catch-all domain, add an opt-in `*@domain` pattern alongside a concrete default:
+| Identity field | Default | Meaning |
+| --- | --- | --- |
+| `address` | required | A bare address, or a `*@domain` pattern |
+| `name` | `""` | Display name |
+| `default` | `false` | The sender used when a request names none |
+| `signature_text` | none | Appended to text bodies after a `-- ` line |
+| `signature_html` | none | Appended to HTML bodies. Without it, `signature_text` is escaped and used |
+
+Without `identities`, one identity is derived from `from_address`. Send, reply and draft requests take an `identity` (an address). The older `from_address` request field still works but must match an identity too. Anything else is refused with `422 invalid_identity` and the list of allowed addresses. Signatures are added unless the request passes `"signature": false`.
+
+For a catch-all domain, add an opt-in `*@domain` pattern next to a concrete default:
 
 ```yaml
 identities:
@@ -76,30 +151,58 @@ identities:
     signature_text: "Contact team"
 ```
 
-An explicit `identity: shop@example.com` uses that concrete address with the pattern's name and signatures. Exact identities take priority over patterns, regardless of configuration order. Patterns match only their exact domain, case-insensitively, never subdomains or suffixes. Partial local-part patterns and domain wildcards are rejected at startup. A pattern cannot be the default or be sent literally; at least one concrete identity is required. Without `default: true`, the first concrete identity is the default.
+- An explicit `identity: shop@example.com` sends as that address with the pattern's name and signatures.
+- Exact identities win over patterns, whatever their order in the file.
+- A pattern matches only its exact domain, case-insensitively, never subdomains. Partial local parts (`info*@x`) and domain wildcards are rejected at startup.
+- A pattern cannot be the default and cannot be sent literally. At least one concrete identity is required. Without `default: true`, the first concrete identity is the default.
 
-Replies without an explicit identity first look for an exact identity anywhere in To/Cc. Otherwise they use the first matching address in To, then Cc, with the pattern's name and signatures. If neither matches, including Bcc-only delivery, they use the concrete default. Reply-all excludes all addresses covered by configured patterns as your own addresses. Only configure a pattern for a domain whose addresses this mailbox may send as; the SMTP provider must also permit those senders. Existing exact-only configurations remain exact-only. HTTP and MCP use the same rules, including draft creation, updates and sender revalidation when sending a saved draft.
+Replies without an explicit identity use the first exact identity found in the original's To or Cc. Otherwise they use the first To, then Cc, address matching a pattern, with that pattern's name and signatures. Otherwise (Bcc-only delivery, for example) they use the default. Reply-all treats every address covered by a pattern as your own and leaves it out.
 
-## State volume
+Only add a pattern for a domain this mailbox may really send as; the SMTP provider must accept those senders too.
 
-`state.path` (env `MAILBOXD_STATE_PATH`, default `/var/lib/mailboxd/state.db`) is a SQLite database in WAL mode, shared by all uvicorn workers and by `mailboxd watch`. It stores audit metadata, send counters, named checkpoints, draft send claims and webhook delivery records. Queued webhooks include message headers, but never bodies or attachments. Mount a volume on `/var/lib/mailboxd` to preserve state when recreating containers. The image creates the directory owned by the unprivileged `mailboxd` user. See [persistence and recovery](operations.md#persistence).
-
-## Limits, labels and send guard
+## Send guard
 
 ```yaml
-send_guard: { dry_run: false, per_hour: 30 }   # rolling hour, per mailbox AND per token; 0 = unlimited
-limits:
-  incoming_message_max_bytes: 33554432        # largest message read from IMAP
-  request_max_bytes: 33554432                 # maximum HTTP/MCP request body
-  attachment_max_bytes: 15728640               # largest attachment served
-  outgoing_attachments_max_bytes: 20971520     # total attachments on one outgoing message
-  mcp_inline_max_bytes: 524288                 # raw source / base64 attachment returned inline over MCP
-labels: { suspect: $Suspect, a_traiter: $ATraiter, fait: $Fait }   # friendly name -> IMAP keyword
+send_guard: { dry_run: false, per_hour: 60 }
 ```
 
-`limits.incoming_message_max_bytes` caps the raw size of a message read from IMAP (default 32 MiB, minimum 1024). An operation that needs the whole message returns `413 too_large` over HTTP and MCP when the message is larger: reading it, downloading its source or an attachment, replying to it, attaching its parts with `from_message`, and updating or sending it as a draft. The service checks the server's `RFC822.SIZE` before downloading anything and requests at most the limit. If a server ignores that range and sends more, the connection is closed before the data is stored and the same error is returned. Listings, threads and webhook notifications read capped headers only, so oversized messages still appear there.
+- `per_hour` caps real sends per rolling hour, separately per mailbox and per token, 0 for unlimited. `smtp.per_hour` replaces it for one mailbox's limit; the per-token limit always uses `send_guard.per_hour`. Over the limit the API answers `429` with `Retry-After`.
+- `dry_run: true` turns every send on the server into a preview.
 
-`smtp.per_hour` overrides `send_guard.per_hour` for one mailbox. Labels are plain IMAP keywords: the friendly names are what you pass to `set_labels` and the `label` search filter (plus the built-in `flagged`).
+Details on how attempts are counted are on the [security page](security.md#rate-limit).
 
+## Limits
 
-[Project overview](../README.md)
+| Field | Default | Bounds | Meaning |
+| --- | --- | --- | --- |
+| `incoming_message_max_bytes` | 32 MiB | ≥ 1024 | Largest message read from IMAP |
+| `request_max_bytes` | 32 MiB | 128 B to 128 MiB | Largest HTTP or MCP request body |
+| `attachment_max_bytes` | 15 MiB | ≥ 1 | Largest attachment served by the download endpoint and `get_attachment` |
+| `outgoing_attachments_max_bytes` | 20 MiB | ≥ 1 | Total attachments on one outgoing message |
+| `mcp_inline_max_bytes` | 512 KiB | ≥ 1024 | Raw source and base64 attachments returned inline over MCP |
+
+`incoming_message_max_bytes` applies to every operation that needs the whole message: reading it, downloading its source or an attachment, replying to it, attaching its parts with `from_message`, and updating or sending it as a draft. Over the limit those return `413 too_large`. The service checks `RFC822.SIZE` before downloading and requests at most the limit; a server that sends more anyway has its connection closed before the data is stored. Listings, threads and webhooks read capped headers only, so oversized messages still show up there.
+
+## Labels
+
+```yaml
+labels: { suspect: $Suspect, a_traiter: $ATraiter, fait: $Fait }
+```
+
+Labels are IMAP keywords with friendly names. You pass the friendly names to `set_labels` and to the `label` search filter, plus the built-in `flagged` (`\Flagged`). Unknown names are refused with the list of known ones. Keywords cannot contain spaces, quotes, parentheses, `\`, `%`, `*`, `{` or `]`, and cannot start with `\`.
+
+## Watcher
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `watch.folder` | `INBOX` | The folder watched in every mailbox |
+| `watch.poll_seconds` | `60` | Poll interval for servers without IMAP IDLE, minimum 5 |
+| `watch.webhooks[].url` | required | `http` or `https`, a hostname, no user info, no fragment |
+| `watch.webhooks[].secret` | required | HMAC key, not empty |
+| `watch.webhooks[].mailboxes` | `"*"` | Mailbox names this target receives events for |
+
+See [Webhooks](webhooks.md) for the payload, signing and retries.
+
+## Startup checks
+
+The config is validated before the server starts. Unique mailbox names, unique token names and values, token and webhook `mailboxes` lists that name existing mailboxes, valid label keywords and valid identities are all required. The exact messages are listed in [Troubleshooting](troubleshooting.md#startup-errors).

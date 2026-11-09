@@ -9,12 +9,12 @@ Read, organize, draft and send mail across multiple IMAP/SMTP accounts through o
 
 For agent access, configure tokens with explicit permissions:
 
-- **Scoped tokens.** A token that holds `read`, `draft` and `organize` cannot send or delete, and does not even see those tools.
+- **Scoped tokens.** A token that holds `read`, `draft` and `organize` cannot send or permanently delete. Over MCP it does not even see the send tools or the `permanent` flag.
 - **Deletion defaults to Trash.** Deleting moves a message to Trash. Permanent erasure needs the `delete` scope and only works from the Trash folder. The service never issues a folder-wide `EXPUNGE`.
 - **Drafts in two steps.** An agent can prepare a reply; a human (or a token with `send`) sends it.
 - **Send guard.** Hourly rate limit, dry-run mode, and a sender address authorized by your configured exact identities or opt-in domain patterns.
 - **Message analysis.** Inspect SPF/DKIM/DMARC verdicts, header mismatches, hidden text and deceptive links. Verdicts are trusted only when the receiving server matches your configuration. Request sanitized HTML when needed.
-- **Audit log.** Every write, and every refused write, is recorded (never message bodies).
+- **Audit log.** Writes are recorded, including those refused for a missing scope or rejected by the mail server. Message bodies never are.
 
 Mail bodies and drafts stay on IMAP. A shared SQLite database stores audit records, send counters, checkpoints, draft send claims and webhook delivery metadata. API requests close their mail-server connections after use; the watcher keeps an IMAP connection open for notifications.
 
@@ -23,11 +23,11 @@ The service uses Python's `imaplib` and `smtplib`, FastAPI, the official MCP Pyt
 ## Contents
 
 - [Quick start](#quick-start)
-- [Configuration](docs/configuration.md)
-- [HTTP API, MCP, safety and webhooks](docs/api.md)
-- [Agent integrations](docs/integrations.md)
-- [Architecture and development](docs/development.md)
-- [Operations, backups and migration](docs/operations.md)
+- [Capabilities](#capabilities)
+- [Documentation](#documentation)
+- [Development](#development)
+- [Sponsor](#sponsor)
+- [License](#license)
 
 ## Quick start
 
@@ -82,7 +82,23 @@ The optional webhook watcher is a second service in the same file, off by defaul
 | Access | Per-token scopes and mailbox allowlists shared by REST and MCP |
 | Operations | SQLite audit records, shared send limits, checkpoints and durable signed webhooks |
 
-Mount `/var/lib/mailboxd` for persistent operational state. HTTP workers and the optional watcher share one SQLite database on a local filesystem. Read the [migration notes](docs/operations.md#migration) before replacing a stateless deployment.
+Mount `/var/lib/mailboxd` for persistent operational state. HTTP workers and the optional watcher share one SQLite database on a local filesystem. Read the [upgrade notes](https://psyb0t.github.io/docker-mailbox/operations/#upgrade-notes) before replacing a stateless deployment.
+
+## Documentation
+
+The full documentation lives at **[psyb0t.github.io/docker-mailbox](https://psyb0t.github.io/docker-mailbox/)**.
+
+| Page | What is in it |
+| --- | --- |
+| [Installation](https://psyb0t.github.io/docker-mailbox/installation/) | Docker, Compose, the webhook watcher, image tags, CLI and environment variables |
+| [Configuration](https://psyb0t.github.io/docker-mailbox/configuration/) | Every config field: mailboxes, tokens and scopes, identities, limits, labels |
+| [HTTP API](https://psyb0t.github.io/docker-mailbox/api/) | Routes, parameters, bodies, responses and error codes |
+| [MCP server](https://psyb0t.github.io/docker-mailbox/mcp/) | Tools, scopes, annotations and client setup |
+| [Safety and security](https://psyb0t.github.io/docker-mailbox/security/) | Deletion, drafts, dry runs, rate limits, sender checks, audit, TLS |
+| [Webhooks](https://psyb0t.github.io/docker-mailbox/webhooks/) | Event payload, signature verification, retries and replay |
+| [Agent integrations](https://psyb0t.github.io/docker-mailbox/integrations/) | Claude Code, Codex and OpenClaw |
+| [Operations](https://psyb0t.github.io/docker-mailbox/operations/) | State, backups, health checks and upgrade notes |
+| [Troubleshooting](https://psyb0t.github.io/docker-mailbox/troubleshooting/) | Startup errors and common API failures |
 
 ## Development
 
@@ -94,7 +110,11 @@ make build          # production image
 make help           # all available targets
 ```
 
-All project tools run inside the development image. Tests use socket-level IMAP/SMTP fixtures, a local HTTP receiver, real SQLite files and a production-container smoke test. See [development](docs/development.md) for details.
+All project tools run inside the development image. Tests use socket-level IMAP/SMTP fixtures, a local HTTP receiver, real SQLite files and a production-container smoke test. See [development](https://psyb0t.github.io/docker-mailbox/development/) for details.
+
+## Sponsor
+
+<a href="https://www.buymeacoffee.com/psyb0t"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-blue.png" alt="Buy Me a Coffee" height="60" width="217"></a>
 
 ## License
 

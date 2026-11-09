@@ -8,7 +8,7 @@ Run mailboxd yourself before connecting the plugin. See the [setup guide](https:
 
 ## Tools
 
-Tools cover mailbox discovery, unified inbox and search, message reading, raw source, attachments, threads, labels, moves, drafts, replies and sending. `delete_message` moves mail to Trash by default. The server lists only tools permitted by the token's scopes. Per-mailbox tools take a `mailbox` argument containing the configured name or email address. See the [tool reference](https://github.com/psyb0t/docker-mailbox/blob/main/docs/api.md#mcp-server).
+Tools cover mailbox discovery, unified inbox and search, message reading, raw source, attachments, threads, labels, moves, drafts, replies and sending. `delete_message` moves mail to Trash by default. The server lists only tools permitted by the token's scopes. Per-mailbox tools take a `mailbox` argument containing the configured name or email address. See the [tool reference](https://psyb0t.github.io/docker-mailbox/mcp/#tools).
 
 ## Configuration
 

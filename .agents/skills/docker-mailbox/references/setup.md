@@ -96,7 +96,7 @@ mailboxes:
 
 ### Provider authentication
 
-Check the provider's current IMAP/SMTP settings and authentication policy. Mailboxd supports username/password login, including app passwords. It does not implement OAuth login. SSL and STARTTLS verify certificates and hostnames; mount a trusted CA bundle for private servers. See the [migration guide](https://github.com/psyb0t/docker-mailbox/blob/main/docs/operations.md#migration).
+Check the provider's current IMAP/SMTP settings and authentication policy. Mailboxd supports username/password login, including app passwords. It does not implement OAuth login. SSL and STARTTLS verify certificates and hostnames; mount a trusted CA bundle for private servers. See the [upgrade notes](https://psyb0t.github.io/docker-mailbox/operations/#upgrade-notes).
 
 ## Catch-all senders
 
@@ -205,4 +205,4 @@ Clients connect to `https://mailbox.yourdomain.com` with their configured bearer
 
 ## Watcher and recovery
 
-HTTP workers and the watcher share one local SQLite volume. It retains audit records, quotas, checkpoints, draft send claims and webhook metadata. Mail bodies and credentials remain outside the database. Configure `watch.webhooks` and start `docker compose --profile watch up -d`. Delivery is at least once. Verify HMAC over timestamp, period and raw body; reject timestamps outside five minutes and deduplicate event IDs. Failed deliveries retry durably, then remain available for admin replay. See the repository [operations guide](https://github.com/psyb0t/docker-mailbox/blob/main/docs/operations.md) for verification, migration and backups.
+HTTP workers and the watcher share one local SQLite volume. It retains audit records, quotas, checkpoints, draft send claims and webhook metadata. Mail bodies and credentials remain outside the database. Configure `watch.webhooks` and start `docker compose --profile watch up -d`. Delivery is at least once. Verify HMAC over timestamp, period and raw body; reject timestamps outside five minutes and deduplicate event IDs. Failed deliveries retry durably, then remain available for admin replay. See the [webhooks guide](https://psyb0t.github.io/docker-mailbox/webhooks/) for verification and the [operations guide](https://psyb0t.github.io/docker-mailbox/operations/) for upgrades and backups.

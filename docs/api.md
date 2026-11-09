@@ -1,111 +1,211 @@
-# HTTP API and MCP reference
+---
+title: "HTTP API"
+description: "mailboxd HTTP API reference: every route with its scope, query parameters, request bodies, response fields, paging cursors and error codes."
+nav_order: 4
+---
 
-## HTTP API
+# HTTP API
 
-Everything is JSON except raw source and attachment downloads. UIDs are used everywhere, never sequence numbers.
+Everything is JSON except raw source and attachment downloads. Messages are addressed by IMAP UID, never by sequence number. A UID is unique within one folder, so routes that take a UID also take `?folder=`, which defaults to the mailbox's `imap.default_folder` (`INBOX` unless configured).
 
-### Errors
+`{n}` below is a mailbox name, or its IMAP or SMTP username when that is an address.
 
-Errors carry an `error` object with `code`, `message` and optional `details`, plus the legacy `detail` string. The `401` body is `{"detail": "missing or invalid Bearer token"}` with `WWW-Authenticate: Bearer`.
+## Authentication
 
-| Status | `code`               | When                                                                                       |
-| ------ | -------------------- | ------------------------------------------------------------------------------------------ |
-| `401`  |                      | Missing or invalid bearer, or no server tokens configured.                                 |
-| `403`  | `permission_denied`  | The token lacks the scope (`details.required_scope`).                                       |
-| `404`  | `not_found`          | Unknown mailbox, message or part, or a mailbox outside the token's allowlist. |
-| `409`  | `conflict`           | The mailbox lacks the protocol, or the action does not apply (e.g. permanent delete outside Trash). |
-| `413`  | `too_large`          | Request body, attachment or message read from IMAP exceeds its configured size limit. |
-| `422`  | `validation_error` / `invalid_identity` | Bad request body, or a sender address not authorized by configured identities. |
-| `429`  | `rate_limited`       | Hourly send limit reached. `Retry-After` header and `details.retry_after`.                  |
-| `502`  | `imap_error` / `smtp_error` | The upstream server said no.                                                         |
+Send `Authorization: Bearer <token>` on every request except `GET /health`. A missing or wrong token gets:
 
-### Routes
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer
 
-| Method & path | Scope | Does |
+{"detail":"missing or invalid Bearer token"}
+```
+
+The token's scopes and mailbox list decide what it can do; see [Tokens and scopes](configuration.md#tokens-and-scopes). FastAPI's generated schema is served at `/openapi.json`, with Swagger UI at `/docs` and ReDoc at `/redoc`. They need the bearer token like every other route, so fetch the schema with `curl -H "Authorization: Bearer $TOKEN"`.
+
+## Errors
+
+Errors carry an `error` object with `code`, `message` and optional `details`, plus a `detail` field for older clients:
+
+```json
+{"error": {"code": "permission_denied", "message": "token 'drafter' lacks the 'send' scope",
+           "details": {"required_scope": "send"}},
+ "detail": "token 'drafter' lacks the 'send' scope"}
+```
+
+| Status | `code` | When |
 | --- | --- | --- |
-| `GET /health` | none | Liveness, always open. |
-| `GET /health/deep` | admin | Per mailbox: IMAP and SMTP connect/auth with latencies. |
-| `GET /mailboxes` | any | Visible mailboxes with address, protocols and identities. |
-| `GET /inbox` | read | Unified, newest-first feed across mailboxes. |
-| `GET /mailboxes/{n}/folders` | read | Folders with delimiter, flags and detected special use. |
-| `POST /mailboxes/{n}/folders` | organize | `{"name"}` creates (and subscribes to) a folder. |
-| `GET /mailboxes/{n}/messages` | read | `?folder&limit&search&cursor`. headers, newest first, raw IMAP `search`. |
-| `GET /mailboxes/{n}/search` | read | Structured search (same filters as `/inbox`) plus `recipient`, `label`, `has_attachments`, `cursor`, `since_cursor`, `checkpoint`. |
-| `GET /mailboxes/{n}/messages/{uid}` | read | `?folder&reader&headers&safe_html`. decoded message with `authentication`, `html_analysis`. |
-| `GET /mailboxes/{n}/messages/{uid}/raw` | read | `message/rfc822`, sent as an attachment. |
-| `GET /mailboxes/{n}/messages/{uid}/attachments/{part_id}` | read | `application/octet-stream`, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, sanitized filename. |
-| `GET /mailboxes/{n}/messages/{uid}/thread` | read | The conversation containing the message. |
-| `GET /mailboxes/{n}/threads` | read | `?folder&limit`. recent conversations. |
-| `DELETE /mailboxes/{n}/messages/{uid}` | organize / delete | `?folder&permanent=false`. moves to Trash; `permanent=true` needs `delete` and a Trash `folder`. |
-| `POST /mailboxes/{n}/messages/delete` | organize / delete | Batch: `{"uids": [...], "permanent": false}`. |
-| `POST /mailboxes/{n}/messages/{uid}/seen` | organize | `{"seen": true}` |
-| `POST /mailboxes/{n}/messages/seen` | organize | Batch: `{"uids": [...], "seen": true}` |
-| `POST /mailboxes/{n}/messages/labels` | organize | `{"uids", "add": [], "remove": []}` (`?folder`). |
-| `POST /mailboxes/{n}/messages/move` | organize | `{"uids", "to_folder"}` (`?folder`). |
-| `POST /mailboxes/{n}/send` | send | Send a new message. |
-| `POST /mailboxes/{n}/messages/{uid}/reply` | send, or draft with `"draft": true` | Reply in the thread. |
-| `GET /mailboxes/{n}/drafts` | read | List drafts. |
-| `POST /mailboxes/{n}/drafts` | draft | Save a draft. |
-| `PUT /mailboxes/{n}/drafts/{uid}` | draft | Replace a draft (the UID changes; the old one is removed). |
-| `DELETE /mailboxes/{n}/drafts/{uid}` | draft | Delete a draft. |
-| `POST /mailboxes/{n}/drafts/{uid}/send` | send | `{"dry_run"}`. send a draft, file a Sent copy, remove the draft. |
-| `GET /mailboxes/{n}/identities` | read | Sender identities. |
-| `GET /mailboxes/{n}/stats` | read | Per-folder message/unseen/recent counts and quota. |
-| `GET /audit` | admin | `?since&action&token&mailbox&limit` |
-| `GET /mailboxes/{n}/webhook-deliveries` | admin | `?limit&offset`. Delivery records for a permitted mailbox. |
-| `POST /mailboxes/{n}/webhook-deliveries/{id}/replay` | admin | Queue a recorded delivery again; rejects an active lease. |
+| `401` | none | Missing or invalid bearer token, or no tokens configured |
+| `403` | `permission_denied` | The token lacks the scope. `details.required_scope` names it |
+| `404` | `not_found` | Unknown mailbox, message, part, folder or delivery, or a mailbox outside the token's list |
+| `409` | `conflict` | The mailbox lacks IMAP or SMTP, or the action does not apply here (see [Conflicts](#conflicts)) |
+| `413` | `too_large` | Request body, attachment or message over its [configured limit](configuration.md#limits) |
+| `422` | `validation_error` | Bad body or parameters. FastAPI validation errors list each problem in `details.errors` |
+| `422` | `invalid_identity` | Sender address not covered by the configured identities. `details.allowed` lists them |
+| `429` | `rate_limited` | Hourly send limit reached. `Retry-After` header and `details.retry_after`, in seconds |
+| `502` | `imap_error` / `smtp_error` | The mail server refused a command or the login. The message is always `mail server operation failed` |
+
+A mail server that cannot be reached at all (connection refused, DNS failure, timeout) currently returns a plain-text `500 Internal Server Error` on most routes instead of `502`. `/inbox` reports it per account in `errors`, and sends report it as `smtp_error`.
+
+### Conflicts
+
+`409 conflict` is returned when:
+
+- the mailbox has no `imap` (reading, organizing, drafts) or no `smtp` (sending, identities);
+- a normal delete targets messages already in Trash, or a permanent delete targets any other folder;
+- permanent deletion is requested on a server without `UIDPLUS`;
+- `POST /mailboxes/{n}/folders` names a folder that exists;
+- a draft was already sent once, or an earlier send attempt for it had an unknown outcome;
+- a webhook delivery is being replayed while it is in flight.
+
+## Routes
+
+| Method and path | Scope | What it does |
+| --- | --- | --- |
+| `GET /health` | none | `{"ok": true, "version": "…"}` |
+| `GET /health/deep` | admin | Connects and logs in to each visible mailbox's IMAP and SMTP servers |
+| `GET /mailboxes` | any token | Visible mailboxes with address, protocols and identities |
+| `GET /inbox` | read | Unified newest-first feed across mailboxes |
+| `GET /mailboxes/{n}/folders` | read | Folders with delimiter, flags and detected special use |
+| `POST /mailboxes/{n}/folders` | organize | `{"name": "…"}` creates a folder and subscribes to it |
+| `GET /mailboxes/{n}/messages` | read | One folder, newest first, with a raw IMAP `search` string |
+| `GET /mailboxes/{n}/search` | read | Structured search in one folder |
+| `GET /mailboxes/{n}/messages/{uid}` | read | The decoded message with security analysis |
+| `GET /mailboxes/{n}/messages/{uid}/raw` | read | The RFC 822 source, as a download |
+| `GET /mailboxes/{n}/messages/{uid}/attachments/{part_id}` | read | One attachment, as a download |
+| `GET /mailboxes/{n}/messages/{uid}/thread` | read | The conversation containing the message |
+| `GET /mailboxes/{n}/threads` | read | Recent conversations |
+| `GET /mailboxes/{n}/identities` | read | Sender identities |
+| `GET /mailboxes/{n}/stats` | read | Per-folder counts and quota |
+| `DELETE /mailboxes/{n}/messages/{uid}` | organize, or delete with `permanent=true` | Move to Trash, or erase from Trash |
+| `POST /mailboxes/{n}/messages/delete` | organize, or delete with `permanent` | Batch: `{"uids": […], "permanent": false}` |
+| `POST /mailboxes/{n}/messages/{uid}/seen` | organize | `{"seen": true}` (the default) or `false` |
+| `POST /mailboxes/{n}/messages/seen` | organize | Batch: `{"uids": […], "seen": true}` |
+| `POST /mailboxes/{n}/messages/labels` | organize | `{"uids": […], "add": […], "remove": […]}` |
+| `POST /mailboxes/{n}/messages/move` | organize | `{"uids": […], "to_folder": "…"}`. The folder must exist |
+| `POST /mailboxes/{n}/send` | send | Send a new message |
+| `POST /mailboxes/{n}/messages/{uid}/reply` | send, or draft with `"draft": true` | Reply in the thread |
+| `GET /mailboxes/{n}/drafts` | read | List drafts, `?limit=` (1 to 500, default 50) |
+| `POST /mailboxes/{n}/drafts` | draft | Save a draft |
+| `PUT /mailboxes/{n}/drafts/{uid}` | draft | Replace a draft. The UID changes |
+| `DELETE /mailboxes/{n}/drafts/{uid}` | draft | Delete a draft |
+| `POST /mailboxes/{n}/drafts/{uid}/send` | send | `{"dry_run": false}`. Send a draft |
+| `GET /audit` | admin | Audit log, see [below](#audit-log) |
+| `GET /mailboxes/{n}/webhook-deliveries` | admin | Webhook delivery records, see [Webhooks](webhooks.md#inspect-and-replay) |
+| `POST /mailboxes/{n}/webhook-deliveries/{id}/replay` | admin | Queue a delivery again |
+
+HTTP batch bodies have no UID count limit beyond `limits.request_max_bytes`; MCP caps them at 500. Every UID must be numeric.
+
+## Listing and searching
+
+### Search filters
+
+`GET /inbox` and `GET /mailboxes/{n}/search` take the same filters. All are optional and combine with AND.
+
+| Parameter | What it matches |
+| --- | --- |
+| `from`, `to`, `subject` | That header contains the text |
+| `body` | The body contains the text |
+| `text` | Headers or body contain the text |
+| `recipient` | To, Cc, `Delivered-To` or `X-Original-To` contains the text, so mail for `contact@` and `support@` aliases, including blind copies, can be told apart |
+| `message_id` | The `Message-ID` header |
+| `since`, `before` | Date on or after / before. ISO (`2026-01-31`) or IMAP (`31-Jan-2026`) |
+| `unseen`, `seen`, `flagged`, `answered` | `true` to require the flag. `false` is the same as leaving it out |
+| `label` | A friendly label name from the config, or `flagged` |
+| `keyword`, `unkeyword` | Has / lacks a raw IMAP keyword |
+| `larger_than`, `smaller_than` | Size in bytes |
+| `folder` | Folder to search. Default: the mailbox's `default_folder` |
+| `limit` | 1 to 500, default 50. On `/inbox` the limit applies per mailbox, so the merged list can be longer |
+
+Matching is done by the IMAP server, so substring and case rules are the server's. Non-ASCII terms are sent with `CHARSET UTF-8`.
+
+`/search` also takes `has_attachments=true|false`. With it, `total` is `-1` because counting would mean scanning every message.
 
 ### Unified inbox
 
-`GET /inbox` searches every visible IMAP mailbox in parallel, merges results newest-first and tags each result with its `mailbox` and `mailbox_address`. Account failures appear in `errors`; other accounts still return results.
-
-| Query param                              | What it does                                                                                              |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `mailbox`                                | CSV of mailbox names **or** addresses. Omit for all visible IMAP mailboxes. No match → `404`.            |
-| `from`, `to`, `subject`, `body`, `text`  | IMAP SEARCH predicates. `text` is full text across headers and body.                                       |
-| `recipient`                              | Matches To, Cc and the `Delivered-To` / `X-Original-To` headers, so `contact@` vs `support@` can be told apart even for aliases and blind copies. |
-| `since`, `before`                        | ISO (`2026-01-31`) or IMAP (`31-Jan-2026`) dates.                                                          |
-| `unseen`, `seen`, `flagged`, `answered`  | Flag filters.                                                                                              |
-| `label`                                  | Only messages carrying this label.                                                                         |
-| `larger_than`, `smaller_than`            | Bytes.                                                                                                     |
-| `folder`, `limit`                        | Folder (default `INBOX`); `limit` is per mailbox, at most 500, default 50. Unified results can exceed it. |
-| `since_cursor`, `checkpoint`             | "New mail only", see below.                                                                                |
+`GET /inbox` searches every visible IMAP mailbox in parallel, merges the results newest first and tags each message with `mailbox`, `mailbox_address` (the IMAP username) and `folder`. `?mailbox=` takes a comma-separated list of names or addresses; one that does not match returns `404`. A failing account goes into `errors` and the others still answer.
 
 ```json
 {
   "messages": [
-    { "uid": "1234", "mailbox": "contact", "mailbox_address": "contact@cgs.example",
-      "from": "boss@corp.com", "subject": "weekly sync", "date": "...", "flags": ["\\Seen"] }
+    { "uid": "1234", "mailbox": "contact", "mailbox_address": "contact@cgs.example", "folder": "INBOX",
+      "from": "boss@corp.com", "to": "contact@cgs.example", "cc": "", "subject": "weekly sync",
+      "date": "…", "message_id": "<…>", "in_reply_to": "", "references": [],
+      "size": 4821, "flags": ["\\Seen"], "labels": [] }
   ],
-  "errors": [{ "mailbox": "support", "error": "login failed: ..." }],
+  "errors": [{ "mailbox": "support", "error": "login failed: …" }],
   "next_since_cursor": "eyJjb250YWN0IjpbIjEiLDEyMzRdfQ",
-  "positions": { "contact": { "uidvalidity": "1", "max_uid": 1234, "folder": "INBOX" } }
+  "positions": { "contact": { "uidvalidity": "1", "max_uid": 1234, "next_after_uid": 1234,
+                              "more_new": false, "folder": "INBOX" } }
 }
 ```
 
+### Single-folder listings
+
+`GET /mailboxes/{n}/messages?folder&limit&search&cursor` lists one folder newest first. `search` is a raw IMAP SEARCH string such as `UNSEEN` or `FROM "boss"`, default `ALL`. Prefer `/search` unless you need a criterion it lacks.
+
+Both `/messages` and `/search` return `messages`, `total` (the number of matches) and `next_cursor`. `/search` also returns `next_since_cursor`, and `more_new` when following a cursor.
+
 ### Paging and "new mail only"
 
-- **Backwards paging.** Single-mailbox listings return `next_cursor` (opaque). Pass it back as `cursor` to get the next, older page. `total` is the number of matches.
-- **New since last time.** Pass the `next_since_cursor` of a previous response as `since_cursor`, or give a name as `checkpoint=` and the server remembers the position for you (per token, mailbox and folder, in the state database). Only mail newer than the position is returned; the oldest unseen messages come first so a checkpoint never skips mail.
-- **UIDVALIDITY.** If the server reset its UID numbering since the cursor was issued, the response says `"reset": true` and starts from scratch.
+- **Older pages.** Pass `next_cursor` back as `cursor` for the next, older page. It is `null` on the last page.
+- **New since last time.** Pass a previous `next_since_cursor` as `since_cursor`, or give a name as `checkpoint=` and the server stores the position for you, per token, checkpoint name, mailbox and folder. Only mail newer than the position comes back, oldest first in the scan so nothing is skipped; `more_new: true` means call again. The first call with a new checkpoint name returns the newest `limit` messages and stores the position after them.
+- **UIDVALIDITY.** If the server renumbered the folder since the cursor was issued, the response has `"reset": true` (and on `/inbox`, `reset_mailboxes`). A `since_cursor` or checkpoint then starts over from the oldest message; a paging `cursor` starts over from the newest.
 
-### Reading a message
+Cursors are opaque base64 strings. Do not build them yourself.
 
-`GET /mailboxes/{n}/messages/{uid}` returns the decoded message (`body_text`, `body_html`, `attachments` with `part_id`, size, `sha256`) plus:
+## Reading a message
 
-- `authentication`: `{trusted, spf, dkim, dmarc, arc, raw, signals}` (see [Authentication-Results trust](#authentication-results-trust)).
-- `html_analysis` (when there is an HTML body): `hidden_text` (display:none, zero font size, white-on-white, ...) and `suspicious_links` (link text that names another domain, punycode, IP literals, URL shorteners, `javascript:`).
-- `?headers=true`: every header in wire order as `[name, value]` pairs.
-- `?safe_html=true`: `body_html_safe`, an allow-list-sanitized body (scripts, event handlers and remote images removed; links kept with `rel="noopener noreferrer nofollow"`).
-- `?reader=true`: `body_reader`, the HTML flattened to clean markdown with [html2text](https://github.com/Alir3z4/html2text) (falls back to the plain text part).
+`GET /mailboxes/{n}/messages/{uid}?folder&reader&headers&safe_html` returns:
 
-Reading never marks a message as read: the server uses `BODY.PEEK`.
+| Field | Content |
+| --- | --- |
+| `uid`, `from`, `to`, `cc`, `reply_to`, `subject`, `date`, `message_id`, `in_reply_to`, `references` | Decoded headers |
+| `body_text`, `body_html` | The first `text/plain` and `text/html` parts, or `null` |
+| `attachments` | `part_id`, `filename`, `content_type`, `size`, `sha256`, `inline` for each attachment |
+| `authentication` | `trusted`, `authserv_id`, `spf`, `dkim` (a list), `dmarc`, `arc`, `raw` (every Authentication-Results header) and `signals` |
+| `html_analysis` | Present when there is an HTML body: `hidden_text`, `suspicious_links`, `link_count` |
+| `body_reader` | With `reader=true`: the HTML as readable markdown via [html2text](https://github.com/Alir3z4/html2text), else the plain text |
+| `headers` | With `headers=true`: every header in wire order, as `[name, value]` pairs |
+| `body_html_safe` | With `safe_html=true`: the HTML through an `nh3` allow-list. Scripts, event handlers, comments and every `<img>` are removed; links keep only `http`, `https` and `mailto` and get `rel="noopener noreferrer nofollow"` |
 
-`security signals` that can appear: `reply_to_domain_mismatch`, `return_path_domain_mismatch`, `display_name_spoof`, `dkim_not_aligned`, `dkim_fail`, `spf_fail` / `spf_softfail`, `dmarc_fail`, `no_authentication_results`, `authentication_untrusted`.
+Reading never marks a message as read; the server fetches with `BODY.PEEK`.
 
-### Sending, replying and drafts
+**`signals`** can contain:
 
-`POST /mailboxes/{n}/send` (and `POST .../drafts`, which takes the same body):
+| Signal | Meaning |
+| --- | --- |
+| `reply_to_domain_mismatch` | Reply-To is on a different organizational domain than From |
+| `return_path_domain_mismatch` | Return-Path is on a different organizational domain than From |
+| `display_name_spoof` | The From display name contains an address other than the real one |
+| `no_authentication_results` | No Authentication-Results header at all |
+| `authentication_untrusted` | Headers exist, but none from your `trusted_authserv_id` (or it is unset) |
+| `spf_fail`, `spf_softfail`, `spf_permerror` | SPF result |
+| `dmarc_fail` | DMARC `fail` or `permerror` |
+| `dkim_fail` | No DKIM signature passed |
+| `dkim_not_aligned` | No passing DKIM signature on the From domain |
+
+How much to trust these depends on [Authentication-Results trust](security.md#authentication-results-trust).
+
+**`hidden_text`** collects text hidden with `display:none`, `visibility:hidden`, zero font size, zero opacity, zero `max-height`, zero height with overflow hidden, the `hidden` attribute, or an element whose text color equals its background color. **`suspicious_links`** lists links with one or more `reasons`: `script_or_data_url`, `ip_literal`, `punycode`, `url_shortener`, `userinfo_in_url`, `text_domain_mismatch` (the link text shows another domain).
+
+### Downloads
+
+- `/raw` returns `message/rfc822` with `Content-Disposition: attachment; filename="message-<uid>.eml"`.
+- `/attachments/{part_id}` returns `application/octet-stream` with `Content-Disposition: attachment`, a sanitized file name and `X-Content-Type-Options: nosniff`. Attachments over `limits.attachment_max_bytes` get `413`.
+
+`part_id` comes from the message's `attachments` list.
+
+### Threads and stats
+
+- `/messages/{uid}/thread` searches the message's folder and the Sent folder for messages linked by `Message-ID`, `In-Reply-To` and `References`, and returns `root`, `count` and `messages` oldest first.
+- `/threads?folder&limit` (1 to 200, default 20) groups the newest headers of the folder and Sent into conversations: `thread_id`, `subject`, `count`, `unread`, `participants`, `last_date` and `messages`.
+- `/stats` returns `folders` (each with `name`, `special`, `messages`, `unseen` and `recent`, or `error` when the server refused STATUS for it) and `quota` when the server supports the QUOTA extension.
+- `/identities` returns `address`, `name`, `default` and `has_signature` for each identity, including `*@domain` patterns.
+
+## Sending, replying and drafts
+
+`POST /mailboxes/{n}/send` and `POST /mailboxes/{n}/drafts` take the same body:
 
 ```json
 {
@@ -115,7 +215,7 @@ Reading never marks a message as read: the server uses `BODY.PEEK`.
   "identity": "support@cgs.example",
   "reply_to": "noreply@example.com",
   "attachments": [
-    { "filename": "a.pdf", "content_type": "application/pdf", "data_base64": "..." },
+    { "filename": "a.pdf", "content_type": "application/pdf", "data_base64": "…" },
     { "from_message": { "uid": "1234", "part_id": "3", "folder": "INBOX" } }
   ],
   "signature": true,
@@ -123,93 +223,52 @@ Reading never marks a message as read: the server uses `BODY.PEEK`.
 }
 ```
 
-At least one of `body_text` / `body_html` is required (both = `multipart/alternative`). Bcc recipients are delivered but never appear in the headers on the wire; the copy filed in Sent keeps them.
+- `to` (at least one) and `subject` are required, plus at least one of `body_text` and `body_html`. Both make a `multipart/alternative` message.
+- `identity` defaults to the mailbox's default identity. See [Identities and signatures](configuration.md#identities-and-signatures).
+- Each attachment has either `data_base64` or `from_message`, which copies a part of a message in the same mailbox and also needs the `read` scope. A missing `content_type` is guessed from the file name.
+- Bcc recipients get the message but never appear in the headers that go on the wire. The Sent copy and drafts keep the Bcc header.
+- Addresses and the subject cannot contain line breaks.
+- `dry_run` is ignored by `/drafts`.
 
-`POST .../messages/{uid}/reply` body: `{"body_text", "body_html", "reply_all": false, "identity", "attachments": [], "quote": true, "draft": false, "signature": true, "dry_run": false}`. The server, not the caller, fills the recipients (`Reply-To`, else `From`; with `reply_all` also To/Cc minus your own addresses), the `Re:` subject, `In-Reply-To` and `References`. Replying to your own sent message goes to the original recipients. After a real send the original gets `\Answered`. With `"draft": true` the reply is saved in Drafts and only needs the `draft` scope.
+`POST /mailboxes/{n}/messages/{uid}/reply` takes `{"body_text", "body_html", "reply_all": false, "identity", "attachments": [], "quote": true, "draft": false, "signature": true, "dry_run": false}`. The server fills in the rest from the original message:
 
-With no explicit `identity`, replies prefer an exact configured identity in To/Cc, then the first To/Cc address matching a configured `*@domain` pattern, then the concrete default. Pattern matches inherit the configured name and signatures. Reply-all excludes matching aliases. See [identities and signatures](configuration.md#identities-and-signatures) for configuration and domain boundaries.
+- **To**: Reply-To, else From. Replying to a message you sent goes to its original recipients.
+- **Cc** with `reply_all`: the original To and Cc, minus your own addresses (the IMAP username, every identity, and addresses covered by `*@domain` patterns).
+- **Subject**: `Re: ` added unless the subject already starts with a reply or forward prefix.
+- **Threading**: `In-Reply-To` and up to 20 `References`.
+- **Quote**: with `quote: true`, the original text (up to 50,000 characters) is quoted below the reply.
 
-A send result looks like:
+After a real send the original gets `\Answered`. With `"draft": true` the reply is saved to Drafts and needs only the `draft` scope.
+
+A send returns:
 
 ```json
-{ "dry_run": false, "from": "...", "to": ["..."], "cc": [], "subject": "...",
-  "message_id": "<...@cgs.example>", "sent_copy": { "folder": "Sent", "uid": "42" },
+{ "dry_run": false, "from": "…", "to": ["…"], "cc": [], "subject": "…",
+  "message_id": "<…@cgs.example>", "sent_copy": { "folder": "Sent", "uid": "42" },
   "warnings": [] }
 ```
 
-`warnings: ["sent_copy_failed"]` means the mail went out but filing the Sent copy failed. In dry-run mode `preview` holds the headers and text body that would have been sent.
+With a dry run, nothing is delivered and `preview` holds the headers and text body that would have been sent. `warnings` can hold `sent_copy_failed`, `answered_flag_failed` or `draft_not_removed`: the mail went out, but filing it afterwards failed. Fix those by hand; do not send again. `sent_copy` is `null` when `save_sent` is off.
 
-## MCP server
+### Drafts
 
-The same operations as MCP tools over **streamable HTTP** at `/mcp` (same port, same bearer). One flat tool set: every per-mailbox tool takes `mailbox` (a name or an address). `tools/list` only returns the tools the caller's scopes allow, and `call_tool` checks again.
+- Creating a draft appends it to the Drafts folder with `\Draft \Seen` and an `X-Mailboxd-Draft-By: <token name>` header, and returns `uid`, `folder` and `message_id`.
+- `PUT /drafts/{uid}` takes any subset of the compose fields; the rest is kept from the old draft. It saves a new draft, removes the old one, and returns the new `uid` with `replaced_uid`. A signature added earlier is replaced, not doubled.
+- `POST /drafts/{uid}/send` strips `X-Mailboxd-*` headers, refreshes `Date`, checks the sender against the identities again, delivers, files the Sent copy, removes the draft, and flags the message it replies to (looked up by `In-Reply-To` in the default folder) as `\Answered`.
 
-| Tool | Scope | Annotations |
-| --- | --- | --- |
-| `mailboxes` | any | read-only |
-| `inbox`, `list_folders`, `list_messages`, `search`, `get_message`, `get_raw_message`, `get_attachment`, `get_thread`, `list_threads`, `identities`, `list_drafts`, `mailbox_stats` | `read` | read-only, idempotent |
-| `create_draft` | `draft` | |
-| `update_draft`, `delete_draft` | `draft` | destructive (replaces/removes only that draft) |
-| `delete_message` | `organize` (Trash), `delete` for `permanent` | destructive. The `permanent` argument is hidden without `delete`. |
-| `mark_seen`, `set_labels`, `move_messages`, `create_folder` | `organize` | idempotent |
-| `reply` | `send`, or `draft` with `draft=true` | destructive, open-world |
-| `send`, `send_draft` | `send` | destructive, open-world |
-| `audit_log`, `webhook_deliveries` | `admin` | read-only |
-| `replay_webhook` | `admin` | destructive, open-world |
-| `health_check` | `admin` | read-only, open-world |
+## Organizing
 
-- `get_raw_message` returns the source as text, truncated to `limits.mcp_inline_max_bytes` (`"truncated": true`); `get_attachment` returns base64 up to the same cap.
-- Successful calls return the JSON both as text and as `structuredContent`.
-- Errors come back as a tool result with `isError: true` and `{"error": {"code", "message", "details"?}}` using the same codes as the HTTP API (`permission_denied`, `not_found`, `rate_limited`, `invalid_identity`, `validation_error`, `imap_error`, `smtp_error`).
+- `DELETE /messages/{uid}` and `POST /messages/delete` move messages to Trash and return `{"ok": true, "action": "trashed", "method": …, "trash_folder": …}`. `method` is `move`, `copy+uid-expunge` or `copy+flagged-deleted`; the last one means the server lacks `UIDPLUS` and the original was left flagged `\Deleted` rather than expunging the whole folder.
+- With `permanent=true`, `folder` must be the Trash folder, the token needs `delete`, and the server needs `UIDPLUS`. The result has `"action": "deleted"`.
+- `POST /messages/labels` needs at least one of `add` and `remove`.
+- `POST /folders` rejects empty names, names over 200 characters and names with line breaks or NUL.
 
-Discovery flow for an agent: call `mailboxes`, then pass the chosen name or address as `mailbox`. For cross-account reads use `inbox`.
+## Audit log
 
-### Transport
+`GET /audit?since&action&token&mailbox&limit` returns `{"entries": […]}`, newest first. `since` is an ISO date or timestamp, or Unix seconds; `limit` is 1 to 1000, default 100. Each entry has `id`, `ts` (Unix seconds), `token`, `action`, `mailbox`, `folder`, `uids`, `outcome` (`ok`, `denied`, `error` or `dry_run`) and `details`. Only entries for the token's own mailboxes are returned.
 
-Plain streamable-HTTP MCP at `/mcp`: `POST` ships requests, `GET` opens the SSE stream, `DELETE` ends the session. There is **no stdio transport**. Most MCP hosts take a `.mcp.json` like this:
+Actions are `send`, `reply`, `send_draft`, `create_draft`, `update_draft`, `delete_draft`, `delete`, `delete_permanent`, `mark_seen`, `set_labels`, `move`, `create_folder` and `replay_webhook`. A refused MCP tool call is logged as `mcp.<tool name>`.
 
-```json
-{
-  "mcpServers": {
-    "mailbox": {
-      "transport": "streamable-http",
-      "url": "http://localhost:8000/mcp",
-      "headers": { "Authorization": "Bearer YOUR_TOKEN_HERE" }
-    }
-  }
-}
-```
+## Deep health
 
-## Safety behaviour
-
-- **Deletion.** `DELETE` / `delete_message` moves messages to Trash using `UID MOVE`, or `UID COPY` followed by `\Deleted` and `UID EXPUNGE`. Without `UIDPLUS`, the fallback leaves the source flagged `\Deleted`. The service never sends a global `EXPUNGE`. Permanent deletion requires `permanent=true`, the `delete` scope, Trash as the source and UIDPLUS; unsupported requests return `409`.
-- **Two-step drafts.** An agent with `draft` saves a message (APPEND with `\Draft \Seen`, header `X-Mailboxd-Draft-By: <token name>`). Someone with `send` reviews it and calls send-draft: the server strips `X-Mailboxd-*` headers, refreshes `Date`, re-validates the sender identity, delivers, files the Sent copy and removes the draft.
-- **Dry run.** Sends are only previewed when `send_guard.dry_run`, the token's `dry_run` or the request's `dry_run` is true. A request can only turn dry-run on. A dry run is audited and does not count against the rate limit.
-- **Rate limit.** `send_guard.per_hour` (override `smtp.per_hour`) caps real sends per rolling hour, separately per mailbox and per token, atomically across workers. Over the limit: `429`, `Retry-After`.
-- **Identity check.** The concrete From address must match an exact configured identity or an opt-in `*@domain` pattern (`422 invalid_identity` otherwise). A wildcard string cannot be sent literally. The server also validates recipients and refuses CR/LF in any header value.
-- **No implicit "read".** Messages are fetched with `BODY.PEEK`; only `mark_seen` changes `\Seen`.
-- **Audit.** Every mutation and every denied mutation is written to the state database; query it with `GET /audit` or the `audit_log` tool.
-- **No cross-mailbox leaks.** A hidden mailbox is indistinguishable from a missing one.
-
-### Authentication-Results trust
-
-Anyone can put an `Authentication-Results` header in a mail they send. Set `auth.trusted_authserv_id` to the hostname **your own** receiving server writes in that header; only headers stamped with it are used for the `spf` / `dkim` / `dmarc` verdicts and `authentication.trusted` is `true`. Without it the topmost header is shown for information but reported `trusted: false` and the signal `authentication_untrusted` is raised. Make sure your MTA strips inbound `Authentication-Results` headers claiming your own id (most do).
-
-## Webhooks and `mailboxd watch`
-
-`mailboxd watch --config config.yaml` is a separate long-running process (run it once, not per uvicorn worker; in Compose: `docker compose --profile watch up -d`). It keeps an IMAP IDLE connection per mailbox (polling every `watch.poll_seconds` when IDLE is missing) and, for each new UID, POSTs JSON to every webhook whose `mailboxes` list matches. Discovery checkpoints and per-recipient delivery records commit together in SQLite. Restarts resume pending work. Delivery is at least once; receivers deduplicate by event_id. Initial startup begins at the current mailbox position without replaying history.
-
-```json
-{ "event": "message.new", "event_id": "EXAMPLE-EVENT-ID", "uidvalidity": "1",
-  "mailbox": "contact", "folder": "INBOX", "uid": "1234",
-  "from": "...", "to": "...", "subject": "...", "date": "...", "message_id": "<...>",
-  "authentication": { "spf": "pass", "dkim": "pass", "dmarc": "pass", "trusted": true },
-  "signals": [] }
-```
-
-No message body is sent. SQLite retains notification metadata for retries and inspection. Requests carry a stable `X-Mailboxd-Event-ID`, `X-Mailboxd-Timestamp`, and `X-Mailboxd-Signature`. HMAC-SHA256 covers the ASCII timestamp, a literal period, and raw body bytes. Receivers must verify it in constant time, enforce a five-minute timestamp window and deduplicate event IDs.
-
-After the initial attempt, retries wait 30 seconds, 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours. Exhausted deliveries remain marked `dead`. Recipient failures are independent and redirects are refused. Administrators inspect `GET /mailboxes/<name>/webhook-deliveries?limit=100&offset=0` and replay with `POST /mailboxes/<name>/webhook-deliveries/<id>/replay`. MCP exposes `webhook_deliveries` and `replay_webhook`. See [operations and recovery](operations.md).
-
-
-
-[Project overview](../README.md)
+`GET /health/deep` returns `{"ok": …, "mailboxes": [{"name", "imap", "smtp"}]}`, where `imap` and `smtp` are `{"ok", "latency_ms", "error"}` or `null` when not configured. It checks only the mailboxes the token can see.
