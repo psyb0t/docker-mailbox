@@ -125,4 +125,4 @@ All project tools run inside the development image. Tests use socket-level IMAP/
 
 ## License
 
-WTFPL. See [LICENSE](LICENSE) and [third-party components](THIRD_PARTY.md).
+Copyright (C) 2026 Ciprian Mandache. Licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (AGPL-3.0-only). If you run a modified version as a network service, you must offer its source to the people who use it. Releases up to 0.8.2 were published under the WTFPL and keep it. See [third-party components](THIRD_PARTY.md). The OpenClaw plugin in `.agents/plugins/mailbox` is MIT.

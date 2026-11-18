@@ -1,6 +1,6 @@
 {
   "name": "mailbox",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Read, search, organize, draft, reply and send mail across IMAP/SMTP accounts through REST or MCP with scoped tokens.",
   "author": {
     "name": "psyb0t",
@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/psyb0t/docker-mailbox",
   "repository": "https://github.com/psyb0t/docker-mailbox",
-  "license": "WTFPL",
+  "license": "AGPL-3.0-only",
   "keywords": [
     "email",
     "imap",

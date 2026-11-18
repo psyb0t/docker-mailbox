@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.0
+
+- The license is now the GNU Affero General Public License v3.0 only (AGPL-3.0-only) instead of the WTFPL. Releases up to 0.8.2 keep the WTFPL. Anyone who runs a modified version as a network service must offer its source to its users. The OpenClaw plugin stays MIT.
+- The documentation site loads the shared visitor tracker on every page.
+- CI runs lint and tests on pushes to every branch again.
+
 ## v0.8.2
 
 Documentation only.
