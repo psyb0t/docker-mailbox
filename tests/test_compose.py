@@ -125,6 +125,18 @@ def test_reply_subject() -> None:
     assert compose.reply_subject("AW: Hallo") == "AW: Hallo"
 
 
+@pytest.mark.parametrize(
+    ("subject", "expected"),
+    [
+        ("  A long\r\n \t subject  ", "Re: A long subject"),
+        ("Re:\r\n\tAlready folded", "Re: Already folded"),
+        (" \r\n\t ", "Re:"),
+    ],
+)
+def test_reply_subject_normalizes_whitespace(subject: str, expected: str) -> None:
+    assert compose.reply_subject(subject) == expected
+
+
 def test_quote_text() -> None:
     q = compose.quote_text("a\n\nb", "x@y.z", "Mon")
     assert "> a\n>\n> b" in q and "x@y.z wrote" in q

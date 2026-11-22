@@ -93,7 +93,8 @@ def quote_text(original_text: str, original_from: str, original_date: str) -> st
 
 
 def reply_subject(subject: str) -> str:
-    return subject if _RE_PREFIX.match(subject or "") else f"Re: {subject}".strip()
+    subject = " ".join(subject.split())
+    return subject if _RE_PREFIX.match(subject) else f"Re: {subject}".strip()
 
 
 def reply_fields(original: Message, own: set[str], reply_all: bool) -> dict[str, object]:

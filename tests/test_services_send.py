@@ -180,6 +180,32 @@ def test_reply_derives_everything_and_sets_answered(env: Env) -> None:
     assert audit_rows(svc)[0]["action"] == "reply"
 
 
+@pytest.mark.parametrize("draft", [False, True])
+def test_reply_unfolds_subject_and_preserves_threading(env: Env, draft: bool) -> None:
+    svc, srv, smtp = env
+    raw = (
+        b"From: alice@example.org\r\nTo: contact@example.com\r\n"
+        b"Subject: Re: A long\r\n \t folded subject\r\n"
+        b"Message-ID: <orig@example.org>\r\nReferences: <root@example.org>\r\n\r\nbody"
+    )
+    uid = str(srv.add("INBOX", raw))
+    result = svc.reply(
+        principal("draft" if draft else "send"),
+        "main",
+        uid,
+        ReplyRequest(body_text="x", draft=draft),
+    )
+    if draft:
+        msg = email.message_from_bytes(
+            srv.get("Drafts", int(result["uid"])).raw, policy=policy.SMTP
+        )
+    else:
+        msg = smtp.sent[0][0]
+    assert msg["Subject"] == "Re: A long folded subject"
+    assert msg["In-Reply-To"] == "<orig@example.org>"
+    assert msg["References"] == "<root@example.org> <orig@example.org>"
+
+
 def test_reply_all_excludes_own_addresses_and_no_quote(env: Env) -> None:
     svc, srv, smtp = env
     uid = put_original(srv, Cc="support@example.com, carol@example.net")
