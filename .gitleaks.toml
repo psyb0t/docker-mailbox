@@ -15,8 +15,7 @@ description = "Gitignored local config, keys, caches, and scan artifacts"
 paths = [
   '''(^|/)config\.ya?ml$''',
   '''(^|/)id_ed25519.*''',
-  '''(^|/)CLAUDE\.md$''',
-  '''(^|/)AGENTS\.md$''',
+  '''(^|/)CLAUDE\.local\.md$''',
   '''(^|/)CODEX\.local\.md$''',
   '''(^|/)PLAN\.md$''',
   '''(^|/)implplan\.md$''',

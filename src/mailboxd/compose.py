@@ -23,6 +23,7 @@ from .mime import decode, message_ids
 INTERNAL_HEADER_PREFIX = "X-Mailboxd-"
 SIGNATURE_MARKER_HEADER = "X-Mailboxd-Signed"
 _RE_PREFIX = re.compile(r"^\s*(re|aw|sv|fw|fwd|tr|réf)\s*:\s*", re.I)
+_SUBJECT_FOLD = re.compile(r"\r?\n[ \t]+")
 
 
 @dataclass
@@ -93,7 +94,8 @@ def quote_text(original_text: str, original_from: str, original_date: str) -> st
 
 
 def reply_subject(subject: str) -> str:
-    return subject if _RE_PREFIX.match(subject or "") else f"Re: {subject}".strip()
+    unfolded = _SUBJECT_FOLD.sub(" ", subject)
+    return unfolded if _RE_PREFIX.match(unfolded) else f"Re: {unfolded}".strip()
 
 
 def reply_fields(original: Message, own: set[str], reply_all: bool) -> dict[str, object]:

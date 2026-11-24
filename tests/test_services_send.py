@@ -180,6 +180,46 @@ def test_reply_derives_everything_and_sets_answered(env: Env) -> None:
     assert audit_rows(svc)[0]["action"] == "reply"
 
 
+@pytest.mark.parametrize(
+    ("draft", "subject", "expected"),
+    [
+        (
+            False,
+            b"Weekly status\r\n update\r\n\tfor the team",
+            "Re: Weekly status update for the team",
+        ),
+        (True, b"RE: Weekly status\r\n\tupdate", "RE: Weekly status update"),
+    ],
+)
+def test_reply_preserves_threading_with_a_folded_subject(
+    env: Env, draft: bool, subject: bytes, expected: str
+) -> None:
+    svc, srv, smtp = env
+    original = make_raw(
+        subject="Question", msgid="<orig@example.org>", References="<root@example.org>"
+    ).replace(b"\n", b"\r\n")
+    raw = original.replace(b"Subject: Question\r\n", b"Subject: " + subject + b"\r\n", 1)
+    uid = str(srv.add("INBOX", raw))
+
+    result = svc.reply(
+        principal("draft" if draft else "send"),
+        "main",
+        uid,
+        ReplyRequest(body_text="Thanks", draft=draft),
+    )
+
+    if draft:
+        assert smtp.sent == []
+        saved = srv.get("Drafts", int(result["uid"]))
+        message = email.message_from_bytes(saved.raw, policy=policy.default)
+    else:
+        ((message, recipients),) = smtp.sent
+        assert recipients == ["alice@example.org"]
+    assert message["Subject"] == expected
+    assert message["In-Reply-To"] == "<orig@example.org>"
+    assert message["References"] == "<root@example.org> <orig@example.org>"
+
+
 def test_reply_all_excludes_own_addresses_and_no_quote(env: Env) -> None:
     svc, srv, smtp = env
     uid = put_original(srv, Cc="support@example.com, carol@example.net")

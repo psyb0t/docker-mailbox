@@ -86,8 +86,7 @@ id_ed25519*
 # Runtime config — keep example, ignore real
 config.yaml
 config.yml
-CLAUDE.md
-AGENTS.md
+CLAUDE.local.md
 .telemetry/
 sec.sarif
 
