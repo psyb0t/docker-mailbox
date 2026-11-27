@@ -81,6 +81,11 @@ limits:
   outgoing_attachments_max_bytes: 20971520  # total attachments on one outgoing message (20 MiB)
   mcp_inline_max_bytes: 524288              # raw source / base64 attachment inline over MCP (512 KiB)
 
+# Where successful MCP tool results go: both (default, the MCP spec's
+# recommendation), text, or structured. One copy halves large results.
+mcp:
+  result_content: both
+
 # ---------------------------------------------------------------------------
 # Labels
 # ---------------------------------------------------------------------------

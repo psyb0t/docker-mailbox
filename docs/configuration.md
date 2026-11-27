@@ -66,6 +66,7 @@ mailboxes:
 | `state.path` | `MAILBOXD_STATE_PATH`, else `/var/lib/mailboxd/state.db` | SQLite state database |
 | `send_guard` | `dry_run: false`, `per_hour: 60` | Global send rules |
 | `limits` | see [Limits](#limits) | Size caps |
+| `mcp.result_content` | `both` | Where successful MCP tool results go: `both`, `text` or `structured`. See [result content](mcp.md#result-content) |
 | `labels` | `suspect`, `a_traiter`, `fait` | Friendly label names mapped to IMAP keywords |
 | `watch` | no webhooks | The webhook watcher, see [Webhooks](webhooks.md) |
 

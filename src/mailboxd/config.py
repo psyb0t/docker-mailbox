@@ -235,6 +235,16 @@ class LimitsConfig(BaseModel):
     mcp_inline_max_bytes: int = Field(default=512 * 1024, ge=1024)
 
 
+McpResultContent = Literal["both", "text", "structured"]
+
+
+class McpConfig(BaseModel):
+    # Where a successful tool result goes: both the text block and
+    # structuredContent (the MCP spec's recommendation), or only one of them.
+    # Error results always keep their text block.
+    result_content: McpResultContent = "both"
+
+
 class StateConfig(BaseModel):
     path: str = Field(
         default_factory=lambda: os.environ.get("MAILBOXD_STATE_PATH", DEFAULT_STATE_PATH)
@@ -288,6 +298,7 @@ class Config(BaseModel):
     state: StateConfig = Field(default_factory=StateConfig)
     send_guard: SendGuardConfig = Field(default_factory=SendGuardConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
+    mcp: McpConfig = Field(default_factory=McpConfig)
     # Friendly label -> IMAP keyword.
     labels: dict[str, str] = Field(default_factory=_default_labels)
     watch: WatchConfig = Field(default_factory=WatchConfig)

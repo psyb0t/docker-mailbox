@@ -43,7 +43,24 @@ What a token sees depends on its scopes:
 - Without `send`, `reply` requires `draft: true`, so the reply can only be saved as a draft.
 - `tools/call` checks the scope again and validates arguments against the full schema before running. A refused call on a write tool is written to the audit log as `mcp.<tool name>`.
 
-Successful calls return the result as JSON text and as `structuredContent`.
+### Result content
+
+By default a successful call returns the result twice: as JSON text in `content` and as `structuredContent`. The MCP specification recommends this so that clients that only read text still get the data. For large results, such as an attachment's base64 or a raw message, that doubles the response size.
+
+Set `mcp.result_content` to send the result once:
+
+```yaml
+mcp:
+  result_content: text  # both (default), text or structured
+```
+
+| Value | `content` | `structuredContent` | Use it when |
+| --- | --- | --- | --- |
+| `both` | The result as JSON text | The result | You do not know what your clients read |
+| `text` | The result as JSON text | Not sent | Your clients read the text, as most agent clients do |
+| `structured` | Empty | The result | Your clients read `structuredContent` |
+
+An object result is sent as is; any other result is wrapped as `{"result": ...}`. Error results always include the JSON text block, whatever this setting says.
 
 ## Tools
 

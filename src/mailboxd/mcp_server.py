@@ -37,7 +37,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from pydantic import ValidationError
 
 from . import __version__, schemas
-from .config import Config
+from .config import Config, McpResultContent
 from .constants import MAX_PAGE_OFFSET
 from .errors import InvalidRequest, MailboxdError, NotFound, PermissionDenied, TooLarge
 from .imap_client import ImapError
@@ -936,13 +936,19 @@ def _check_scopes(spec: ToolSpec, p: Principal, args: dict[str, Any]) -> None:
 # ── result helpers ───────────────────────────────────────────────────────────
 
 
-def _ok(data: Any) -> types.CallToolResult:
+def _ok(data: Any, result_content: McpResultContent = "both") -> types.CallToolResult:
+    """Build a successful result. `result_content` chooses whether the payload
+    goes into the text block, structuredContent, or both."""
     structured = json.loads(json.dumps(data, default=str))
     if not isinstance(structured, dict):
         structured = {"result": structured}
+    content: list[types.ContentBlock] = []
+    if result_content != "structured":
+        text = json.dumps(structured, ensure_ascii=False)
+        content.append(types.TextContent(type="text", text=text))
     return types.CallToolResult(
-        content=[types.TextContent(type="text", text=json.dumps(structured, ensure_ascii=False))],
-        structuredContent=structured,
+        content=content,
+        structuredContent=structured if result_content != "text" else None,
     )
 
 
@@ -1012,6 +1018,7 @@ def build_mcp_app(cfg: Config, service: Service) -> Server[Any, Any]:
     catalog = build_catalog(cfg)
     by_name = {spec.name: spec for spec in catalog}
     full_schemas = {spec.name: spec.schema() for spec in catalog}
+    result_content = cfg.mcp.result_content
 
     server: Server[Any, Any] = Server("mailboxd", version=__version__)
 
@@ -1040,7 +1047,7 @@ def build_mcp_app(cfg: Config, service: Service) -> Server[Any, Any]:
             _validate(full_schemas[name], args)
             handler = spec.handler
             result = await anyio.to_thread.run_sync(lambda: handler(service, p, args))
-            return _ok(result)
+            return _ok(result, result_content)
         except Exception as e:  # noqa: BLE001 - every failure becomes an isError result
             return _from_exception(e)
 

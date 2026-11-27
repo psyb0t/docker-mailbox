@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.0
+
+- Added `mcp.result_content` to choose where successful MCP tool results go. `both`, the default, keeps sending the result as JSON text and as `structuredContent`, as the MCP specification recommends. `text` or `structured` sends it once, which halves the size of large results such as attachment base64 and raw messages. Error results always keep their text block. Reported by @rimago in issue #14.
+
 ## v0.9.1
 
 - Sent replies and reply drafts now handle folded Subject headers and preserve message threading. Reported by @rimago in issue #13.
